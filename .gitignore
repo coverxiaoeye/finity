@@ -1,7 +1,7 @@
-#for eclipse
+# for eclipse
 .project
 .classpath
 
-#for idea
+# for idea
 .iml
 .idea
