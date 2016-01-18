@@ -2,7 +2,7 @@ local redis = require('resty.redis')
 
 local M = { channel = 'all' }
 
-function M.fire(args, sess)
+M.fire = function(args, sess)
   local red, err = redis:new()
   if not red then
     ngx.log(ngx.ERR, 'failed to new redis: ', err)

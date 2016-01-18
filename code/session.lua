@@ -10,12 +10,12 @@ return function()
     closed = false,
   }
 
-  function M.close()
+  M.close = function()
     M.closed = true
     -- TODO other cleanups
   end
 
-  function M.start()
+  M.start = function()
     M.id = ngx.var.connection
 
     -- register callback of client-closing-connection event
