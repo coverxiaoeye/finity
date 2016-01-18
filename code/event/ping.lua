@@ -14,7 +14,7 @@ M.fire = function(args, sess)
     ngx.log(ngx.ERR, 'failed to connect to redis: ', err)
     sess.close()
   end
-  local ok, err = red:publish('ping/' .. sess.id, '1')
+  local ok, err = red:publish('ping/' .. sess.id, args)
   if not ok then
     ngx.log(ngx.ERR, 'failed to publish to redis: ', err)
     sess.close()

@@ -108,7 +108,7 @@ return function()
           local evt, args
           local ok = pcall(function()
             if typ == 'ping' then
-              evt, args = 'ping', {}
+              evt, args = 'ping', '1'
             else
               local r = cjson.decode(message)
               evt, args = r.event, r.args
