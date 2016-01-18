@@ -3,5 +3,5 @@
 .classpath
 
 # for idea
-.iml
+*.iml
 .idea
