@@ -55,7 +55,7 @@ return function()
   -- after event processing
   local function after(my, red, commit, keep)
     if my then
-      if ok then
+      if commit then
         my:query('COMMIT')
       else
         my:query('ROLLBACK')
