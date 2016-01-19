@@ -3,6 +3,9 @@ return function()
   local server = require('resty.websocket.server')
   local mysql = require('resty.mysql')
   local redis = require('resty.redis')
+
+  local code = require('code')
+  local throw = require('throw')
   local config = require('config')
   local data = require('data')
   local event = require('event')
@@ -85,6 +88,7 @@ return function()
     if not ok then
       ngx.log(ngx.ERR, 'failed to register the on_abort callback: ', err)
       ngx.exit(500)
+      return
     end
 
     local sock, err = server:new({ timeout = 3000, max_payload_len = 8192 })
@@ -181,8 +185,10 @@ return function()
                 local r = cjson.decode(message)
                 evt, args = r.event, r.args
               end
-              local ret = event[evt].fire(args, M, data(my), red)
-              return ret
+              if not evt or not event[evt] then
+                throw(code.INVALID_EVENT)
+              end
+              return event[evt].fire(args, M, data(my), red)
             end)
             commit = ok
 
