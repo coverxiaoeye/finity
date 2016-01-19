@@ -6,7 +6,7 @@ local config = require('config')
 return function(db)
   local M = { db = db }
 
-  function M.queryone(sql, ...)
+  M.queryone = function(sql, ...)
     local s = string.format(sql, ...)
     if config.debug then
       ngx.log(ngx.DEBUG, s)
@@ -20,7 +20,7 @@ return function(db)
     return ret[1]
   end
 
-  function M.query(sql, ...)
+  M.query = function(sql, ...)
     local s = string.format(sql, ...)
     if config.debug then
       ngx.log(ngx.DEBUG, s)
@@ -34,7 +34,7 @@ return function(db)
     return ret
   end
 
-  function M.update(sql, ...)
+  M.update = function(sql, ...)
     local s = string.format(sql, ...)
     if config.debug then
       ngx.log(ngx.DEBUG, s)
@@ -48,7 +48,7 @@ return function(db)
     return ret.affected_rows
   end
 
-  function M.insert(sql, ...)
+  M.insert = function(sql, ...)
     local s = string.format(sql, ...)
     if config.debug then
       ngx.log(ngx.DEBUG, s)
@@ -62,7 +62,7 @@ return function(db)
     return ret.insert_id
   end
 
-  function M.updates(sql, ps, each)
+  M.updates = function(sql, ps, each)
     if config.debug then
       ngx.log(ngx.DEBUG, sql)
       ngx.log(ngx.DEBUG, cjson.encode(ps))
@@ -100,8 +100,7 @@ return function(db)
     end
   end
 
-  -- TODO group commit support
-  function M.inserts(sql, ps)
+  M.inserts = function(sql, ps)
     if config.debug then
       ngx.log(ngx.DEBUG, sql)
       ngx.log(ngx.DEBUG, cjson.encode(ps))
