@@ -110,7 +110,7 @@ return function()
 
     -- extract channels
     local function channel()
-      local t = {}
+      local t = { 'error/' .. M.id }
       for _, v in pairs(event) do
         if v.channel == 'self' then
           table.insert(t, v.key .. '/' .. M.id)
