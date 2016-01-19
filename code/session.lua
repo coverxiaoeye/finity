@@ -10,6 +10,7 @@ return function()
   local M =
   {
     id = 0,
+    group = 0,
     closed = false,
   }
 
@@ -116,6 +117,8 @@ return function()
           table.insert(t, v.key .. '/' .. M.id)
         elseif v.channel == 'all' then
           table.insert(t, v.key)
+        elseif v.channel == 'group' then
+          table.insert(t, v.key .. '/' .. M.group)
         end
       end
       return t
@@ -216,6 +219,22 @@ return function()
                   ngx.log(ngx.ERR, 'failed to publish event: ', err)
                   keep = false
                   M.close()
+                end
+              elseif event[evt].channel == 'group' then
+                local ids, err = red:lrange('group/' .. M.group, 0, -1)
+                if not ids then
+                  ngx.log(ngx.ERR, 'failed to read members: ', err)
+                  keep = false
+                  M.close()
+                else
+                  for _, id in ipairs(ids) do
+                    local ok, err = red:publish(event[evt].key .. '/' .. id, ret)
+                    if not ok then
+                      ngx.log(ngx.ERR, 'failed to publish event: ', err)
+                      keep = false
+                      M.close()
+                    end
+                  end
                 end
               end
             end
