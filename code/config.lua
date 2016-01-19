@@ -1,5 +1,6 @@
 return
 {
+  debug = true,
   mysql =
   {
     timeout = 1000,
