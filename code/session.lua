@@ -119,8 +119,23 @@ return function()
         if typ == 'close' then
           M.close()
         elseif typ == 'ping' or typ == 'text' then
-          local keep, my, red = before()
 
+          -- ensure first event to be 'signin'
+          if M.id == 0 then
+            local passed = false
+            if typ == 'text' then
+              local ok, ret = pcall(function() return cjson.decode(message) end)
+              if ok and ret.event == 'signin' then
+                passed = true
+              end
+            end
+            if not passed then
+              M.close()
+              break
+            end
+          end
+
+          local keep, my, red = before()
           -- BEGIN event processing
           local commit = false
           if keep then
