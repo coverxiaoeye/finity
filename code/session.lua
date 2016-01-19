@@ -113,12 +113,10 @@ return function()
     local function channel()
       local t = { 'error/' .. M.id }
       for _, v in pairs(event) do
-        if v.channel == 'self' then
+        if v.channel == 'self' or v.channel == 'group' then
           table.insert(t, v.key .. '/' .. M.id)
         elseif v.channel == 'all' then
           table.insert(t, v.key)
-        elseif v.channel == 'group' then
-          table.insert(t, v.key .. '/' .. M.group)
         end
       end
       return t
