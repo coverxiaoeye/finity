@@ -9,6 +9,7 @@ return function()
   local config = require('config')
   local data = require('data')
   local event = require('event')
+  local const = require('const')
 
   local M =
   {
@@ -20,6 +21,34 @@ return function()
   -- close session
   M.close = function()
     M.closed = true
+
+    if M.id > 0 then
+      local ok, red = pcall(function()
+        local red, err = redis:new()
+        if not red then
+          ngx.log(ngx.ERR, 'failed to new redis: ', err)
+          throw(code.REDIS)
+        end
+        red:set_timeout(config.redis.timeout)
+        local ok, err = red:connect(config.redis.host)
+        if not ok then
+          ngx.log(ngx.ERR, 'failed to connect to redis: ', err)
+          throw(code.REDIS)
+        end
+        local ok, err = red:srem(const.KEY_SESSION, M.id)
+        if not ok then
+          ngx.log(ngx.ERR, 'failed to do srem: ', err)
+          throw(code.REDIS)
+        end
+        return red
+      end)
+      if not ok then
+        ngx.log(ngx.FATAL, 'failed to remove session (' .. M.id .. ')')
+      end
+      if red then
+        red:close()
+      end
+    end
     -- TODO other cleanups
   end
 
@@ -228,11 +257,17 @@ return function()
               else
                 ex = { code = -1 }
               end
-              local ok, err = red:publish('error/' .. M.id, cjson.encode(ex))
-              if not ok then
-                ngx.log(ngx.ERR, 'failed to publish event: ', err)
+
+              if ex.code == code.SIGNIN_ALREADY or ex.code == code.SIGNIN_UNAUTH then
                 keep = false
                 M.close()
+              else
+                local ok, err = red:publish('error/' .. M.id, cjson.encode(ex))
+                if not ok then
+                  ngx.log(ngx.ERR, 'failed to publish event: ', err)
+                  keep = false
+                  M.close()
+                end
               end
             elseif ret then
               local ret = cjson.encode(ret)
