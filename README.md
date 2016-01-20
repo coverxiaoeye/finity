@@ -1,5 +1,5 @@
 # finity
-A websocket-based mobile game server run on [OpenResty](http://openresty.org).
+A websocket-based mobile game server running on [OpenResty](http://openresty.org).
 
 ## code/
 Lua code directory
