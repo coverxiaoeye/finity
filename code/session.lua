@@ -250,13 +250,13 @@ return function()
 
             -- error handling
             if not ok then
-              ngx.log(ngx.ERR, 'failed to call function: ', evt or '', message)
               local idx, ex = string.find(ret, '{', 1, true)
               if idx then
                 ex = loadstring('return ' .. string.sub(ret, idx))()
               else
-                ex = { code = -1 }
+                ex = { err = -1 }
               end
+              ngx.log(ngx.ERR, 'failed to fire event: ', message, ', errcode: ', ex.err)
 
               if ex.code == code.SIGNIN_ALREADY or ex.code == code.SIGNIN_UNAUTH then
                 keep = false

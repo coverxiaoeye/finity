@@ -26,7 +26,7 @@ M.fire = function(args, sess, data, red)
     ngx.log(ngx.ERR, 'failed to do sismember: ', err)
     throw(code.REDIS)
   end
-  if ok == '1' then
+  if ok == 1 then
     throw(code.SIGNIN_ALREADY)
   end
 
