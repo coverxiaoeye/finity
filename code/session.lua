@@ -122,7 +122,7 @@ return function()
     if next(keys) then
       local json = cjson.encode(ret)
       for _, key in ipairs(keys) do
-        local ok, err = red:publish(event[evt].key .. '/' .. M.id, json)
+        local ok, err = red:publish(key, json)
         if not ok then
           ngx.log(ngx.ERR, 'failed to publish: ', err)
           return
@@ -283,7 +283,7 @@ return function()
           end
           ngx.log(ngx.ERR, 'failed to fire event: ', message, ', errcode: ', ex.err)
 
-          if ex.code == code.SIGNIN_ALREADY or ex.code == code.SIGNIN_UNAUTH then
+          if ex.err == code.SIGNIN_ALREADY or ex.err == code.SIGNIN_UNAUTH then
             M.close()
             ret = nil
           else
