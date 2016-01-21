@@ -100,14 +100,47 @@ return function()
     end
   end
 
-  local function subscribe(sock)
-    local sub, err = redis:new()
-    if not sub then
+  -- dispatch event
+  local function dispatch(evt, ret, red)
+    local keys = {}
+    if evt == 'error' then
+      keys[#keys + 1] = 'error/' .. M.id
+    elseif event[evt].channel == 'self' then
+      keys[#keys + 1] = event[evt].key .. '/' .. M.id
+    elseif event[evt].channel == 'all' then
+      keys[#keys + 1] = event[evt].key
+    elseif event[evt].channel == 'group' then
+      local ids, err = red:lrange('group/' .. M.group, 0, -1)
+      if not ids then
+        ngx.log(ngx.ERR, 'failed to read members: ', err)
+        return
+      end
+      for _, id in ipairs(ids) do
+        keys[#keys + 1] = event[evt].key .. '/' .. id
+      end
+    end
+    if next(keys) then
+      local json = cjson.encode(ret)
+      for _, key in ipairs(keys) do
+        local ok, err = red:publish(event[evt].key .. '/' .. M.id, json)
+        if not ok then
+          ngx.log(ngx.ERR, 'failed to publish: ', err)
+          return
+        end
+      end
+    end
+    return true
+  end
+
+  -- listen event
+  local function listen(sock)
+    local red, err = redis:new()
+    if not red then
       ngx.log(ngx.ERR, 'failed to new sub redis: ', err)
       return
     end
-    sub:set_timeout(config.redis.timeout)
-    local ok, err = sub:connect(config.redis.host)
+    red:set_timeout(config.redis.timeout)
+    local ok, err = red:connect(config.redis.host)
     if not ok then
       ngx.log(ngx.ERR, 'failed to connect to sub redis: ', err)
       return
@@ -126,13 +159,13 @@ return function()
       return t
     end
 
-    local function listen()
+    local function _listen()
       local cs = channel()
-      sub:subscribe(unpack(cs))
+      red:subscribe(unpack(cs))
 
       -- BEGIN subscribe reading (nonblocking)
       while not M.closed do
-        local ret, err = sub:read_reply()
+        local ret, err = red:read_reply()
         if not ret and err ~= 'timeout' then
           ngx.log(ngx.ERR, 'failed to read reply: ', err)
           M.close()
@@ -153,11 +186,11 @@ return function()
           end
         end
       end
-      sub:close()
+      red:close()
       -- END subscribe reading (nonblocking)
     end
 
-    return ngx.thread.spawn(listen)
+    return ngx.thread.spawn(_listen)
   end
 
   -- start session
@@ -175,9 +208,8 @@ return function()
       ngx.exit(ngx.HTTP_CLOSE)
     end
 
-    local subscriber
     -- BEGIN socket reading (nonblocking)
-    local idlen = 0
+    local n, listener = 0, nil
     while not M.closed do
       local message, typ, err = sock:recv_frame()
       if sock.fatal then
@@ -186,8 +218,8 @@ return function()
       end
       -- kick unauthorized connection when idle 5 times (hard-coded)
       if not message and M.id == 0 and string.find(err, ': timeout', 1, true) then
-        idlen = idlen + 1
-        if idlen >= 5 then
+        n = n + 1
+        if n >= 5 then
           ngx.log(ngx.ERR, 'unauthorized connection')
           M.close()
         end
@@ -233,10 +265,10 @@ return function()
           return event[evt].fire(args, M, data(my), red)
         end)
 
-        -- init subscriber
+        -- init listener
         if ok and evt == 'signin' and M.id > 0 then
-          subscriber = subscribe(sock)
-          if not subscriber then
+          listener = listen(sock)
+          if not listener then
             M.close()
           end
         end
@@ -253,52 +285,27 @@ return function()
 
           if ex.code == code.SIGNIN_ALREADY or ex.code == code.SIGNIN_UNAUTH then
             M.close()
+            ret = nil
           else
-            local ok, err = red:publish('error/' .. M.id, cjson.encode(ex))
-            if not ok then
-              ngx.log(ngx.ERR, 'failed to publish event: ', err)
-              M.close()
-            end
+            evt, ret = 'error', ex
           end
-        elseif ret then
-          local ret = cjson.encode(ret)
-          -- publish event to specified channel
-          if event[evt].channel == 'self' then
-            local ok, err = red:publish(event[evt].key .. '/' .. M.id, ret)
-            if not ok then
-              ngx.log(ngx.ERR, 'failed to publish event: ', err)
-              M.close()
-            end
-          elseif event[evt].channel == 'all' then
-            local ok, err = red:publish(event[evt].key, ret)
-            if not ok then
-              ngx.log(ngx.ERR, 'failed to publish event: ', err)
-              M.close()
-            end
-          elseif event[evt].channel == 'group' then
-            local ids, err = red:lrange('group/' .. M.group, 0, -1)
-            if not ids then
-              ngx.log(ngx.ERR, 'failed to read members: ', err)
-              M.close()
-            else
-              for _, id in ipairs(ids) do
-                local ok, err = red:publish(event[evt].key .. '/' .. id, ret)
-                if not ok then
-                  ngx.log(ngx.ERR, 'failed to publish event: ', err)
-                  M.close()
-                end
-              end
-            end
+        end
+
+        if ret then
+          local ok = dispatch(evt, ret, red)
+          if not ok then
+            M.close()
           end
         end
         -- END event processing
+
         after(my, red, ok)
       end
     end
     -- END socket reading (nonblocking)
 
-    if subscriber then
-      local ok, res = ngx.thread.wait(subscriber)
+    if listener then
+      local ok, res = ngx.thread.wait(listener)
       if not ok then
         ngx.log(ngx.ERR, 'failed to wait listener: ', res)
       end
