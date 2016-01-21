@@ -31,7 +31,7 @@ return
     timeout = 1000,
     keepalive = 6000,
     poolsize = 64,
-    host = 'unix:/usr/local/var/run/redis.sock'
+    host = 'unix:/usr/local/var/run/redis-finity.sock'
   }
 }
 
