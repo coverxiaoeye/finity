@@ -32,6 +32,15 @@ return
     keepalive = 6000,
     poolsize = 64,
     host = 'unix:/usr/local/var/run/redis-finity.sock'
+  },
+
+  -- gate config
+  gate =
+  {
+    timeout = 3000,
+    host = 'gate.weiyouba.cn',
+    port = 80,
+    uri = '/user/verify'
   }
 }
 

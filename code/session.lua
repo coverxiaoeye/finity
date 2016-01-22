@@ -103,6 +103,10 @@ return function()
 
   -- dispatch event
   local function dispatch(evt, ret, red)
+    if ret == nil then
+      return true
+    end
+
     local keys = {}
     if evt == 'error' then
       keys[#keys + 1] = 'error/' .. M.id
@@ -152,17 +156,16 @@ return function()
       local t = { 'error/' .. M.id }
       for _, v in pairs(event) do
         if v.channel == 'self' or v.channel == 'group' then
-          table.insert(t, v.key .. '/' .. M.id)
+          t[#t + 1] = v.key .. '/' .. M.id
         elseif v.channel == 'all' then
-          table.insert(t, v.key)
+          t[#t + 1] = v.key
         end
       end
       return t
     end
 
     local function _listen()
-      local cs = channel()
-      red:subscribe(unpack(cs))
+      red:subscribe(unpack(channel()))
       M.ready = true
 
       -- BEGIN subscribe reading (nonblocking)
@@ -281,15 +284,16 @@ return function()
 
         -- error handling
         if not ok then
+          ngx.log(ngx.ERR, 'error occurred: ', ret)
           local idx, ex = string.find(ret, '{', 1, true)
           if idx then
             ex = loadstring('return ' .. string.sub(ret, idx))()
           else
-            ex = { err = -1 }
+            ex = { err = code.UNKNOWN }
           end
           ngx.log(ngx.ERR, 'failed to fire event: ', message, ', errcode: ', ex.err)
 
-          if ex.err == code.SIGNIN_ALREADY or ex.err == code.SIGNIN_UNAUTH then
+          if evt == 'signin' then
             M.close()
             ret = nil
           else
@@ -297,11 +301,9 @@ return function()
           end
         end
 
-        if ret then
-          local ok = dispatch(evt, ret, red)
-          if not ok then
-            M.close()
-          end
+        local ok = dispatch(evt, ret, red)
+        if not ok then
+          M.close()
         end
         -- END event processing
 
