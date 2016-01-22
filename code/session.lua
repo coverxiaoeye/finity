@@ -16,6 +16,7 @@ return function()
     id = 0,
     group = 0,
     closed = false,
+    ready = false,
   }
 
   -- close session
@@ -162,6 +163,7 @@ return function()
     local function _listen()
       local cs = channel()
       red:subscribe(unpack(cs))
+      M.ready = true
 
       -- BEGIN subscribe reading (nonblocking)
       while not M.closed do
@@ -270,6 +272,10 @@ return function()
           listener = listen(sock)
           if not listener then
             M.close()
+          end
+          -- wait for redis listener to be ready
+          while not M.ready do
+            ngx.sleep(0.001)
           end
         end
 

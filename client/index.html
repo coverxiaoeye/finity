@@ -6,7 +6,7 @@
     {
       if(ws !== null)
         return log('already connected');
-      ws = new WebSocket('ws://weiyouba.cn/s');
+      ws = new WebSocket('ws://s1.weiyouba.cn/s');
       ws.onopen = function()
       {
         log('connected');
@@ -38,7 +38,6 @@
       if(ws === null)
         return log('connect first');
       var text = document.getElementById('text').value;
-      document.getElementById('text').value = "";
       ws.send(text);
       log('message sent: ' + text);
       return false;
@@ -50,6 +49,12 @@
       document.getElementById('log').appendChild(li);
       return false;
     }
+    function clearall()
+    {
+      var x = document.getElementById('log');
+      x.innerHTML = '';
+      return false;
+    }
   </script>
 </head>
 <body>
@@ -59,6 +64,9 @@
   </button>
   <button type="button" onclick="return disconnect();">
     Disconnect
+  </button>
+  <button type="button" onclick="return clearall();">
+    Clear
   </button>
   <input id="text" type="text">
   <button type="submit">Send</button>
