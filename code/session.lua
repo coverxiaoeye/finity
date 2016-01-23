@@ -177,10 +177,14 @@ return function()
           M.close()
         end
         if ret and ret[1] == 'message' then
-          local bs, err = sock:send_text(ret[3])
-          if not bs then
-            ngx.log(ngx.ERR, 'failed to send text: ', err)
+          if ret[2] == 'close/' .. M.id then
             M.close()
+          else
+            local bs, err = sock:send_text(ret[3])
+            if not bs then
+              ngx.log(ngx.ERR, 'failed to send text: ', err)
+              M.close()
+            end
           end
         end
       end
