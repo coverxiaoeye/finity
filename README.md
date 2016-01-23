@@ -1,22 +1,22 @@
 # Description
 A websocket game server template using OpenResty/Redis/Mysql.
 
-## Request format(json object)
+## Request json format
 <pre>
 {
-  "id": #type: number, description: client specified id which will be returned on publishing.
-  "event": #type: string, description: event name, such as 'signin', 'ping', etc.
-  "args": #type: any, description: arguments of this event.
+  "id": #type: number #description: client specified event id which will be returned unchanged.
+  "event": #type: string #description: event name, such as 'signin', 'ping', etc.
+  "args": #type: any #description: arguments of this event.
 }
 </pre>
 
-## Response format(json object)
+## Response json format
 <pre>
 {
-  "id": #type: number, description: client specified id or <b>0</b> when this notification dispatched by server side.
-  "event": #type: string, description: event name, such as 'signin', 'ping', etc.
-  "args": #type: any, description: arguments of this event, <b>NULLABLE</b>.
-  "err": "type: number, description: error code, <b>NULLABLE</b>.
+  "id": #type: number #description: client specified event id or <b>0</b> on broadcasting.
+  "event": #type: string #description: event name, such as 'signin', 'ping', etc.
+  "args": #type: any #description: arguments of this event, <b>NULLABLE</b>.
+  "err": "type: number #description: error code, <b>NULLABLE</b>.
 }
 </pre>
 
