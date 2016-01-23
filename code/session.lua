@@ -102,39 +102,33 @@ return function()
   end
 
   -- dispatch event
-  local function dispatch(evt, ret, red)
-    if ret == nil then
-      return true
-    end
-
+  local function dispatch(evt, resp, red)
     local keys = {}
     if evt == 'error' then
-      keys[#keys + 1] = 'error/' .. M.id
+      keys[1] = 'error/' .. M.id
     elseif event[evt].channel == 'self' then
-      keys[#keys + 1] = event[evt].key .. '/' .. M.id
+      keys[1] = event[evt].key .. '/' .. M.id
     elseif event[evt].channel == 'all' then
-      keys[#keys + 1] = event[evt].key
+      resp.id = 0
+      keys[1] = event[evt].key
     elseif event[evt].channel == 'group' then
+      resp.id = 0
       local ids, err = red:lrange('group/' .. M.group, 0, -1)
       if not ids then
         ngx.log(ngx.ERR, 'failed to read members: ', err)
-        return
+        throw(code.REDIS)
       end
       for _, id in ipairs(ids) do
         keys[#keys + 1] = event[evt].key .. '/' .. id
       end
     end
-    if next(keys) then
-      local json = cjson.encode(ret)
-      for _, key in ipairs(keys) do
-        local ok, err = red:publish(key, json)
-        if not ok then
-          ngx.log(ngx.ERR, 'failed to publish: ', err)
-          return
-        end
+    for _, key in ipairs(keys) do
+      local ok, err = red:publish(key, cjson.encode(resp))
+      if not ok then
+        ngx.log(ngx.ERR, 'failed to publish: ', err)
+        throw(code.REDIS)
       end
     end
-    return true
   end
 
   -- listen event
@@ -247,10 +241,10 @@ return function()
         end
 
         -- BEGIN event processing
-        local evt, args
+        local id, evt, args
         local ok, ret = pcall(function()
           local r = cjson.decode(message)
-          evt, args = r.event, r.args
+          id, evt, args = r.id, r.event, r.args
           if not evt or not event[evt] then
             throw(code.INVALID_EVENT)
           end
@@ -262,38 +256,35 @@ return function()
           listener = listen(sock)
           if not listener then
             M.close()
-          end
-          -- wait for redis listener to be ready
-          while not M.ready do
-            ngx.sleep(0.001)
+          else
+            while not M.ready do
+              ngx.sleep(0.001)
+            end
           end
         end
 
-        -- error handling
+        local resp = {id = id, event = evt}
         if not ok then
           ngx.log(ngx.ERR, 'error occurred: ', ret)
-          local idx, ex = string.find(ret, '{', 1, true)
-          if idx then
-            ex = loadstring('return ' .. string.sub(ret, idx))()
-          else
-            ex = { err = code.UNKNOWN }
-          end
-          ngx.log(ngx.ERR, 'failed to fire event: ', message, ', errcode: ', ex.err)
-
+          local idx = string.find(ret, '{', 1, true)
+          local errcode = idx and loadstring('return ' .. string.sub(ret, idx))().err or code.UNKNOWN
+          ngx.log(ngx.ERR, 'failed to fire event: ', message, ', errcode: ', errcode)
           if evt == 'signin' then
             M.close()
-            ret = nil
           else
-            evt, ret = 'error', ex
+            evt, resp.err = 'error', errcode
+          end
+        else
+          resp.args = ret
+        end
+
+        if not M.closed then
+          local done = pcall(function() dispatch(evt, resp, red) end)
+          if not done then
+            M.close()
           end
         end
-
-        local ok = dispatch(evt, ret, red)
-        if not ok then
-          M.close()
-        end
         -- END event processing
-
         after(my, red, ok)
       end
     end

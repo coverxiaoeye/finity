@@ -6,7 +6,7 @@
     {
       if(ws !== null)
         return log('already connected');
-      ws = new WebSocket('ws://s1.weiyouba.cn/s');
+      ws = new WebSocket('ws://s1.weiyouba.cn:1999/s');
       ws.onopen = function()
       {
         log('connected');
