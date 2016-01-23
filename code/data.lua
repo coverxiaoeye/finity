@@ -81,7 +81,7 @@ return function(db)
           ngx.log(ngx.ERR, 'failed to mysql set: ', err)
           throw(code.MYSQL)
         end
-        table.insert(us, '@p' .. i)
+        us[#us + 1] = '@p' .. i
       end
       ret, err, errno, sqlstate = M.db:query('EXECUTE data_updates USING ' .. table.concat(us, ','))
       if not ret then
@@ -120,14 +120,14 @@ return function(db)
           ngx.log(ngx.ERR, 'failed to mysql set: ', err)
           throw(code.MYSQL)
         end
-        table.insert(us, '@p' .. i)
+        us[#us + 1] = '@p' .. i
       end
       ret, err, errno, sqlstate = M.db:query('EXECUTE data_inserts USING ' .. table.concat(us, ','))
       if not ret then
         ngx.log(ngx.ERR, 'failed to mysql execute: ', err)
         throw(code.MYSQL)
       end
-      table.insert(ids, ret.insert_id)
+      ids[#ids + 1] = ret.insert_id
     end
     ret, err, errno, sqlstate = M.db:query('DEALLOCATE PREPARE data_inserts')
     if not ret then

@@ -153,7 +153,8 @@ return function()
 
     -- extract channels
     local function channel()
-      local t = { 'error/' .. M.id }
+      --close event should always be admin side
+      local t = { 'error/' .. M.id, 'close/' .. M.id }
       for _, v in pairs(event) do
         if v.channel == 'self' or v.channel == 'group' then
           t[#t + 1] = v.key .. '/' .. M.id
@@ -176,18 +177,10 @@ return function()
           M.close()
         end
         if ret and ret[1] == 'message' then
-          if ret[2] == 'ping/' .. M.id then
-            local bs, err = sock:send_pong()
-            if not bs then
-              ngx.log(ngx.ERR, 'failed to send pong: ', err)
-              M.close()
-            end
-          else
-            local bs, err = sock:send_text(ret[3])
-            if not bs then
-              ngx.log(ngx.ERR, 'failed to send text: ', err)
-              M.close()
-            end
+          local bs, err = sock:send_text(ret[3])
+          if not bs then
+            ngx.log(ngx.ERR, 'failed to send text: ', err)
+            M.close()
           end
         end
       end
@@ -221,10 +214,10 @@ return function()
         ngx.log(ngx.ERR, 'failed to receive frame: ', err)
         M.close()
       end
-      -- kick unauthorized connection when idle 5 times (hard-coded)
+      -- kick unauthorized connection when idle 3 times (hard-coded)
       if not message and M.id == 0 and string.find(err, ': timeout', 1, true) then
         n = n + 1
-        if n >= 5 then
+        if n >= 3 then
           ngx.log(ngx.ERR, 'unauthorized connection')
           M.close()
         end
@@ -232,17 +225,11 @@ return function()
 
       if typ == 'close' then
         M.close()
-      elseif typ == 'ping' or typ == 'text' then
+      elseif typ == 'text' then
         -- ensure first event to be 'signin'
         if M.id == 0 then
-          local passed = false
-          if typ == 'text' then
-            local ok, ret = pcall(function() return cjson.decode(message) end)
-            if ok and ret.event == 'signin' then
-              passed = true
-            end
-          end
-          if not passed then
+          local ok, ret = pcall(function() return cjson.decode(message) end)
+          if not ok then
             M.close()
             break
           end
@@ -258,12 +245,8 @@ return function()
         -- BEGIN event processing
         local evt, args
         local ok, ret = pcall(function()
-          if typ == 'ping' then
-            evt, args = 'ping', '1'
-          else
-            local r = cjson.decode(message)
-            evt, args = r.event, r.args
-          end
+          local r = cjson.decode(message)
+          evt, args = r.event, r.args
           if not evt or not event[evt] then
             throw(code.INVALID_EVENT)
           end
