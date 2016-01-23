@@ -38,14 +38,16 @@ SIGNIN_UNAUTH = 1002, -- sid unauthorized
 
 ## Event list
 
-### Ping
+[ping](#ping)&nbsp;&nbsp;&nbsp;[signin](#signin)
+
+### ping
 Ping event to keep the current connection.
-This event should be sent only if sign-in completed.
+This event should be sent only if sign in completed.
 
 FORMAT: {"id": xxx, "event": "ping", "args": xxx}
 * <b>args</b> can be omitted (better)
 
-### Sign in
+### signin
 Sign in should be the first event sent to server.
 Connection will be closed on any errors.
 Idle connections will be closed within 9 seconds.
