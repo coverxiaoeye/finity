@@ -4,9 +4,11 @@ return
   MYSQL = 1, -- mysql query error
   REDIS = 2, -- redis command error
   HTTP = 3, -- http request error
-
   INVALID_EVENT = 11, -- event not defined
 
-  SIGNIN_ALREADY = 1001, -- already signed in
-  SIGNIN_UNAUTH = 1002, -- sid unauthorized
+  LOCK = 1001, -- mysql optimistic lock
+  WATCH = 1002, -- redis transaction error
+
+  SIGNIN_ALREADY = 2001, -- already signed in
+  SIGNIN_UNAUTH = 2002, -- sid unauthorized
 }
