@@ -1,8 +1,8 @@
 # Description
 A websocket game server template running on
-<a href="http://openresty.org" target="_blank">OpenResty</a>
-<a href="http://redis.io" target="_blank">Redis</a>
-Mysql
+<a href="http://openresty.org" target="_blank">OpenResty</a> (version: 1.9.7.2+)
+<a href="http://redis.io" target="_blank">Redis</a> (version: 2.0.0+)
+Mysql (version: 5.5+)
 
 ## Request json format
 <pre>

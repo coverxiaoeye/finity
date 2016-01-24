@@ -3,6 +3,7 @@ return function()
   local server = require('resty.websocket.server')
   local mysql = require('resty.mysql')
   local redis = require('resty.redis')
+  local semaphore = require('ngx.semaphore')
 
   local code = require('code')
   local throw = require('throw')
@@ -132,7 +133,7 @@ return function()
   end
 
   -- listen event
-  local function listen(sock)
+  local function listen(sema, sock)
     local red, err = redis:new()
     if not red then
       ngx.log(ngx.ERR, 'failed to new sub redis: ', err)
@@ -161,7 +162,7 @@ return function()
 
     local function _listen()
       red:subscribe(unpack(channel()))
-      M.ready = true
+      sema:post(1)
 
       -- BEGIN subscribe reading (nonblocking)
       while not M.closed do
@@ -191,6 +192,12 @@ return function()
 
   -- start session
   M.start = function()
+    local sema, err = semaphore.new()
+    if not sema then
+      ngx.log(ngx.ERR, 'failed to create semaphore: ', err)
+      ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
+
     -- register callback of client-closing-connection event
     local ok, err = ngx.on_abort(M.close)
     if not ok then
@@ -228,6 +235,7 @@ return function()
         break
       end
       if typ == 'text' then
+        n = 0
         local ok, my, red = before()
         if not ok then
           after(my, red, false)
@@ -239,7 +247,7 @@ return function()
         local ok, ret = pcall(function()
           local r = cjson.decode(message)
           id, evt, args = r.id, r.event, r.args
-          if not evt or not event[evt] then
+          if not evt or not event[evt] or (M.id == 0 and evt ~= 'signin') then
             throw(code.INVALID_EVENT)
           end
           return event[evt].fire(args, M, data(my), red)
@@ -247,12 +255,14 @@ return function()
 
         -- init listener
         if ok and evt == 'signin' and M.id > 0 then
-          listener = listen(sock)
+          listener = listen(sema, sock)
           if not listener then
             M.close()
           else
-            while not M.ready do
-              ngx.sleep(0.001)
+            local done, err = sema:wait(1)
+            if not done then
+              ngx.log(ngx.ERR, 'failed to wait listener start: ', ret)
+              M.close()
             end
           end
         end
@@ -263,7 +273,7 @@ return function()
           local idx = string.find(ret, '{', 1, true)
           local errcode = idx and loadstring('return ' .. string.sub(ret, idx))().err or code.UNKNOWN
           ngx.log(ngx.ERR, 'failed to fire event: ', message, ', errcode: ', errcode)
-          if evt == 'signin' then
+          if errcode < 1000 then
             M.close()
           else
             evt, resp.err = 'error', errcode
