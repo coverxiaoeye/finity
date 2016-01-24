@@ -211,35 +211,29 @@ return function()
       if sock.fatal then
         ngx.log(ngx.ERR, 'failed to receive frame: ', err)
         M.close()
+        break
       end
-      -- kick unauthorized connection when idle 3 times (hard-coded)
-      if not message and M.id == 0 and string.find(err, ': timeout', 1, true) then
+      -- kick idle connection when idle for 5 times (hard-coded)
+      if not message and string.find(err, ': timeout', 1, true) then
         n = n + 1
-        if n >= 3 then
-          ngx.log(ngx.ERR, 'unauthorized connection')
+        if n >= 5 then
+          ngx.log(ngx.ERR, 'idle connection')
           M.close()
+          break
         end
       end
 
       if typ == 'close' then
         M.close()
-      elseif typ == 'text' then
-        -- ensure first event to be 'signin'
-        if M.id == 0 then
-          local ok, ret = pcall(function() return cjson.decode(message) end)
-          if not ok then
-            M.close()
-            break
-          end
-        end
-
+        break
+      end
+      if typ == 'text' then
         local ok, my, red = before()
         if not ok then
           after(my, red, false)
           M.close()
           break
         end
-
         -- BEGIN event processing
         local id, evt, args
         local ok, ret = pcall(function()
@@ -263,7 +257,7 @@ return function()
           end
         end
 
-        local resp = {id = id, event = evt}
+        local resp = { id = id, event = evt }
         if not ok then
           ngx.log(ngx.ERR, 'error occurred: ', ret)
           local idx = string.find(ret, '{', 1, true)

@@ -43,6 +43,7 @@ SIGNIN_UNAUTH = 1002, -- sid unauthorized
 ### ping
 Ping event to keep the current connection.
 This event should be sent only if sign in completed.
+Idle connections will be closed within several seconds (actually 5 times of read timeout).
 
 FORMAT: {"id": xxx, "event": "ping", "args": xxx}
 * <b>args</b> can be omitted (better)
@@ -50,7 +51,6 @@ FORMAT: {"id": xxx, "event": "ping", "args": xxx}
 ### signin
 Sign in should be the first event sent to server.
 Connection will be closed on any errors.
-Idle connections will be closed within 9 seconds.
 
 FORMAT: {"id": xxx, "event": "signin", "args": {"sid": "xxx"}}
 * <b>sid</b> is a string obtained from gate server
