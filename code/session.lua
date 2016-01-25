@@ -16,8 +16,7 @@ return function()
   {
     id = 0,
     group = 0,
-    closed = false,
-    ready = false,
+    closed = false
   }
 
   -- close session
@@ -103,24 +102,24 @@ return function()
   end
 
   -- dispatch event
-  local function dispatch(evt, resp, red)
+  local function dispatch(eventname, resp, red)
     local keys = {}
-    if evt == 'error' then
-      keys[1] = 'error/' .. M.id
-    elseif event[evt].channel == 'self' then
-      keys[1] = event[evt].key .. '/' .. M.id
-    elseif event[evt].channel == 'all' then
+    if eventname == 'error' then
+      keys[#keys + 1] = 'error/' .. M.id
+    elseif event[eventname].channel == 'self' then
+      keys[#keys + 1] = event[eventname].key .. '/' .. M.id
+    elseif event[eventname].channel == 'all' then
       resp.id = 0
-      keys[1] = event[evt].key
-    elseif event[evt].channel == 'group' then
+      keys[#keys + 1] = event[eventname].key
+    elseif event[eventname].channel == 'group' then
       resp.id = 0
-      local ids, err = red:lrange('group/' .. M.group, 0, -1)
+      local ids, err = red:smembers('group/' .. M.group)
       if not ids then
         ngx.log(ngx.ERR, 'failed to read members: ', err)
         throw(code.REDIS)
       end
       for _, id in ipairs(ids) do
-        keys[#keys + 1] = event[evt].key .. '/' .. id
+        keys[#keys + 1] = event[eventname].key .. '/' .. id
       end
     end
     for _, key in ipairs(keys) do
@@ -148,7 +147,7 @@ return function()
 
     -- extract channels
     local function channel()
-      --close event should always be admin side
+      --close event should always be from admin side
       local t = { 'error/' .. M.id, 'close/' .. M.id }
       for _, v in pairs(event) do
         if v.channel == 'self' or v.channel == 'group' then
@@ -162,7 +161,7 @@ return function()
 
     local function _listen()
       red:subscribe(unpack(channel()))
-      sema:post(1)
+      sema:post(1) -- post a resource to main thread when subscribing done
 
       -- BEGIN subscribe reading (nonblocking)
       while not M.closed do
@@ -243,23 +242,23 @@ return function()
           break
         end
         -- BEGIN event processing
-        local id, evt, args
+        local eventid, eventname, args
         local ok, ret = pcall(function()
           local r = cjson.decode(message)
-          id, evt, args = r.id, r.event, r.args
-          if not evt or not event[evt] or (M.id == 0 and evt ~= 'signin') then
+          eventid, eventname, args = r.id, r.event, r.args
+          if not eventname or not event[eventname] or (M.id == 0 and eventname ~= 'signin') then
             throw(code.INVALID_EVENT)
           end
-          return event[evt].fire(args, M, data(my), red)
+          return event[eventname].fire(args, M, data(my), red)
         end)
 
         -- init listener
-        if ok and evt == 'signin' and M.id > 0 then
+        if ok and eventname == 'signin' and M.id > 0 then
           listener = listen(sema, sock)
           if not listener then
             M.close()
           else
-            local done, err = sema:wait(1)
+            local done, err = sema:wait(1) -- wait for listener to start within 1 second at most
             if not done then
               ngx.log(ngx.ERR, 'failed to wait listener start: ', ret)
               M.close()
@@ -267,7 +266,7 @@ return function()
           end
         end
 
-        local resp = { id = id, event = evt }
+        local resp = { id = eventid, event = eventname }
         if not ok then
           ngx.log(ngx.ERR, 'error occurred: ', ret)
           local idx = string.find(ret, '{', 1, true)
@@ -276,14 +275,14 @@ return function()
           if errcode < 1000 then
             M.close()
           else
-            evt, resp.err = 'error', errcode
+            eventname, resp.err = 'error', errcode
           end
         else
           resp.args = ret
         end
 
         if not M.closed then
-          local done = pcall(function() dispatch(evt, resp, red) end)
+          local done = pcall(function() dispatch(eventname, resp, red) end)
           if not done then
             M.close()
           end
