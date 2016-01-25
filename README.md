@@ -51,6 +51,7 @@ FORMAT: {"id": xxx, "event": "signin", "args": {"sid": "xxx"}}
 
 ### chat
 Broadcast a message to all players online including sender-self.
+
 FORMAT: {"id": xxx, "event": "chat", "args": xxx}
 * <b>args</b> any type of message for broadcasting.
 
