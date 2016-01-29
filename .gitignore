@@ -1,7 +1,9 @@
 # for eclipse
 .project
 .classpath
+.buildpath
+.settings/
 
 # for idea
 *.iml
-.idea
+.idea/
