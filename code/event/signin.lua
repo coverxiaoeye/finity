@@ -4,10 +4,11 @@ local throw = require('throw')
 local const = require('const')
 local config = require('config')
 local http = require('resty.http')
+local match = require('thread.match')
 
 local M = { channel = 'self', key = 'signin' }
 
-M.fire = function(args, sess, data, red)
+M.fire = function(args, sess, data)
   if sess.id > 0 then
     throw(code.SIGNIN_ALREADY)
   end
@@ -42,14 +43,14 @@ M.fire = function(args, sess, data, red)
     throw(code.HTTP)
   end
   httpc:close()
-  local userid = cjson.decode(body).id
+  local userid = cjson.decode(body).userid
 
   local sql = 'SELECT id FROM player WHERE userid = %d'
   local player = data.queryone(sql, userid)
   if not player then
     throw(code.SIGNIN_UNAUTH)
   end
-  local ok, err = red:sismember(const.KEY_SESSION, player.id)
+  local ok, err = sess.red:sismember(const.KEY_SESSION, player.id)
   if not ok then
     ngx.log(ngx.ERR, 'failed to do sismember: ', err)
     throw(code.REDIS)
@@ -57,13 +58,24 @@ M.fire = function(args, sess, data, red)
   if ok == 1 then
     throw(code.SIGNIN_ALREADY)
   end
-  local ok, err = red:sadd(const.KEY_SESSION, player.id)
+  local ok, err = sess.red:sadd(const.KEY_SESSION, player.id)
+  if not ok then
+    ngx.log(ngx.ERR, 'failed to do sadd: ', err)
+    throw(code.REDIS)
+  end
+
+  --TODO for match demo
+  local groupid = 1
+  local ok, err = sess.red:sadd(const.KEY_GROUP .. '/' .. groupid, player.id)
   if not ok then
     ngx.log(ngx.ERR, 'failed to do sadd: ', err)
     throw(code.REDIS)
   end
   sess.id = player.id
+  sess.group = groupid
 
+  ngx.thread.spawn(match, sess) -- TODO thread monitoring mechanism
+  
   return player
 end
 
