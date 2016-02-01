@@ -141,7 +141,7 @@ return function()
             M.close()
           else
             local bs, err = M.sock:send_text(ret[3])
-            if not bs then
+            if not M.sock.fatal then
               ngx.log(ngx.ERR, 'failed to send text: ', err)
               M.close()
             end
@@ -191,8 +191,8 @@ return function()
 
     local n = 0
     while not M.closed do
-      local message, typ, err = sock:recv_frame()
-      if sock.fatal then
+      local message, typ, err = M.sock:recv_frame()
+      if M.sock.fatal then
         ngx.log(ngx.ERR, 'failed to receive frame: ', err)
         M.close()
         break
