@@ -69,38 +69,41 @@ return function()
     end
   end
 
-  local function mysql_start()
-    local my, err = mysql:new()
-    if not my then
+  -- begin transaction
+  local function txbegin()
+    local db, err = mysql:new()
+    if not db then
       ngx.log(ngx.ERR, 'failed to new mysql: ', err)
       return
     end
-    my:set_timeout(config.mysql.timeout)
-    local ret, err, errno, sqlstate = my:connect(config.mysql.datasource)
+    db:set_timeout(config.mysql.timeout)
+    local ret, err, errno, sqlstate = db:connect(config.mysql.datasource)
     if not ret then
       ngx.log(ngx.ERR, 'failed to connect to mysql: ', err)
       return
     end
-    local ret, err, errno, sqlstate = my:query('START TRANSACTION')
+    local ret, err, errno, sqlstate = db:query('START TRANSACTION')
     if not ret then
       ngx.log(ngx.ERR, 'failed to start mysql transaction: ', err)
       return
     end
-    return my
+    return db
   end
 
-  local function mysql_end(my, commit)
-    if my then
+  -- end transaction
+  local function txend(db, commit)
+    if db then
       if commit then
-        my:query('COMMIT')
+        db:query('COMMIT')
       else
-        my:query('ROLLBACK')
+        db:query('ROLLBACK')
       end
-      my:set_keepalive(config.mysql.keepalive, config.mysql.poolsize)
+      db:set_keepalive(config.mysql.keepalive, config.mysql.poolsize)
     end
   end
 
-  local function onsignin()
+  -- listen to event
+  local function listen()
     local red, err = redis:new()
     if not red then
       ngx.log(ngx.ERR, 'failed to new sub redis: ', err)
@@ -127,7 +130,7 @@ return function()
       return t
     end
 
-    local function _listen()
+    return ngx.thread.spawn(function()
       M.sub:subscribe(unpack(channel()))
       M.sema:post(1)
       while not M.closed do
@@ -141,16 +144,14 @@ return function()
             M.close()
           else
             local bs, err = M.sock:send_text(ret[3])
-            if not M.sock.fatal then
+            if M.sock.fatal then
               ngx.log(ngx.ERR, 'failed to send text: ', err)
               M.close()
             end
           end
         end
       end
-    end
-
-    return ngx.thread.spawn(_listen)
+    end)
   end
 
   -- start session
@@ -179,17 +180,16 @@ return function()
     local red, err = redis:new()
     if not red then
       ngx.log(ngx.ERR, 'failed to new redis: ', err)
-      return
+      ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
     red:set_timeout(config.redis.timeout)
     local ok, err = red:connect(config.redis.host)
     if not ok then
       ngx.log(ngx.ERR, 'failed to connect to redis: ', err)
-      return
+      ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
     M.red = red
 
-    local n = 0
     while not M.closed do
       local message, typ, err = M.sock:recv_frame()
       if M.sock.fatal then
@@ -197,40 +197,28 @@ return function()
         M.close()
         break
       end
-      -- kick idle connection when idle for 5 times (hard-coded)
-      if not message and string.find(err, ': timeout', 1, true) then
-        n = n + 1
-        if n >= 5 then
-          ngx.log(ngx.ERR, 'idle connection')
-          M.close()
-          break
-        end
-      end
-      if typ == 'close' then
-        M.close()
-        break
-      end
+      if typ == 'close' then M.close() break end
       if typ == 'text' then
-        n = 0
-        local my = mysql_start()
-        if not my then
-          mysql_end(my, false)
+        local ok, ret = pcall(function() return cjson.decode(message) end)
+        if not ok then M.close() break end
+        local id, name, args = ret.id, ret.event, ret.args
+        if not name or not event[name] or not event[name].fire or (M.id == 0 and name ~= 'signin') then
           M.close()
           break
         end
-        local eventid, eventname, args
-        local ok, ret = pcall(function()
-          local r = cjson.decode(message)
-          eventid, eventname, args = r.id, r.event, r.args
-          if not eventname or not event[eventname] or not event[eventname].fire or (M.id == 0 and eventname ~= 'signin') then
-            throw(code.INVALID_EVENT)
-          end
-          return event[eventname].fire(args, M, data(my))
-        end)
-        mysql_end(my, ok)
 
-        if ok and eventname == 'signin' and M.id > 0 then
-          M.t_sub = onsignin()
+        -- start transaction only if tx attribute set
+        local db
+        if event[name].tx then
+          db = txbegin()
+          if not db then txend(db, false) M.close() break end
+        end
+        local ok, ret = pcall(function() return event[name].fire(args, M, data(db)) end)
+        txend(db, ok)
+
+        -- begin listen event when signin done
+        if ok and name == 'signin' and M.id > 0 then
+          M.t_sub = listen()
           local done, err = M.sema:wait(1) -- wait for redis connection within 1 second at most
           if not done then
             ngx.log(ngx.ERR, 'failed to wait listener start: ', ret)
@@ -238,7 +226,8 @@ return function()
           end
         end
 
-        local resp = { id = eventid, event = eventname }
+        -- dispatch event
+        local resp = { id = id, event = name }
         if not ok then
           ngx.log(ngx.ERR, 'error occurred: ', ret)
           local idx = string.find(ret, '{', 1, true)
@@ -255,9 +244,7 @@ return function()
 
         if not M.closed then
           local done = pcall(function() M.dispatch(resp) end)
-          if not done then
-            M.close()
-          end
+          if not done then M.close() end
         end
       end
     end

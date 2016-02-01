@@ -1,4 +1,4 @@
-local M = { channel = 'self', key = 'ping' }
+local M = { channel = 'self', key = 'ping', tx = false }
 
 M.fire = function(args, sess, data)
   return args

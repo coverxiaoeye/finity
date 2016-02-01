@@ -6,7 +6,7 @@ local config = require('config')
 local http = require('resty.http')
 local match = require('thread.match')
 
-local M = { channel = 'self', key = 'signin' }
+local M = { channel = 'self', key = 'signin', tx = true }
 
 M.fire = function(args, sess, data)
   if sess.id > 0 then
@@ -74,7 +74,7 @@ M.fire = function(args, sess, data)
   sess.id = player.id
   sess.group = groupid
   sess.match = ngx.thread.spawn(match, sess)
-  
+
   return player
 end
 
