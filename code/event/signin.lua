@@ -73,8 +73,7 @@ M.fire = function(args, sess, data)
   end
   sess.id = player.id
   sess.group = groupid
-
-  ngx.thread.spawn(match, sess) -- TODO thread monitoring mechanism
+  sess.match = ngx.thread.spawn(match, sess)
   
   return player
 end

@@ -20,19 +20,23 @@ return function()
     sock = nil,
     sub = nil,
     red = nil,
-    sema = nil
+    sema = nil,
+    t_sub = nil,
+    t_match = nil,
   }
 
   -- close session
   M.close = function()
     M.closed = true
-    local ok, err = M.red:srem(const.KEY_SESSION, M.id)
-    if not ok then
-      ngx.log(ngx.FATAL, 'failed to do srem: ', err)
-    end
-    local ok, err = M.red:srem(const.KEY_GROUP .. '/' .. M.group, M.id)
-    if not ok then
-      ngx.log(ngx.FATAL, 'failed to do srem: ', err)
+    if M.red then
+      local ok, err = M.red:srem(const.KEY_SESSION, M.id)
+      if not ok then
+        ngx.log(ngx.FATAL, 'failed to do srem: ', err)
+      end
+      local ok, err = M.red:srem(const.KEY_GROUP .. '/' .. M.group, M.id)
+      if not ok then
+        ngx.log(ngx.FATAL, 'failed to do srem: ', err)
+      end
     end
     -- TODO logic clean up
   end
@@ -84,6 +88,7 @@ return function()
     end
     return my
   end
+
   local function mysql_end(my, commit)
     if my then
       if commit then
@@ -184,7 +189,7 @@ return function()
     end
     M.red = red
 
-    local n, s = 0, nil
+    local n = 0
     while not M.closed do
       local message, typ, err = sock:recv_frame()
       if sock.fatal then
@@ -207,7 +212,6 @@ return function()
       end
       if typ == 'text' then
         n = 0
-
         local my = mysql_start()
         if not my then
           mysql_end(my, false)
@@ -226,15 +230,11 @@ return function()
         mysql_end(my, ok)
 
         if ok and eventname == 'signin' and M.id > 0 then
-          s = onsignin()
-          if not s then
+          M.t_sub = onsignin()
+          local done, err = M.sema:wait(1) -- wait for redis connection within 1 second at most
+          if not done then
+            ngx.log(ngx.ERR, 'failed to wait listener start: ', ret)
             M.close()
-          else
-            local done, err = sema:wait(1) -- wait for redis connection within 1 second at most
-            if not done then
-              ngx.log(ngx.ERR, 'failed to wait listener start: ', ret)
-              M.close()
-            end
           end
         end
 
@@ -263,10 +263,16 @@ return function()
     end
 
     -- clean up
-    if s then
-      local ok, res = ngx.thread.wait(s)
+    if M.t_sub then
+      local ok, res = ngx.thread.wait(M.t_sub)
       if not ok then
-        ngx.log(ngx.ERR, 'failed to wait listener: ', res)
+        ngx.log(ngx.ERR, 'failed to wait sub thread: ', res)
+      end
+    end
+    if M.t_match then
+      local ok, res = ngx.thread.wait(M.t_match)
+      if not ok then
+        ngx.log(ngx.ERR, 'failed to wait match thread: ', res)
       end
     end
     if M.red then
