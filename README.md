@@ -49,14 +49,14 @@ Connection will be closed on any errors.
 FORMAT: {"id": xxx, "event": "signin", "args": {"sid": "xxx"}}
 * <b>sid</b> is a string obtained from gate server
 
-### chat
-Broadcast a message to all players online including sender-self.
+### send
+Send a hero.
 
-FORMAT: {"id": xxx, "event": "chat", "args": xxx}
-* <b>args</b> any type of message for broadcasting.
+FORMAT: {"id": xxx, "event": "send", "args": {"heroid": xxx}}
+* <b>heroid</b> hero id to be sent.
 
-BROADCAST: {"id": 0, "event": "chat", "args": {"playerid": xxx, "message": xxx}
+BROADCAST: {"id": 0, "event": "send", "args": {"playerid": xxx, "heroid": xxx}
 * <b>args.playerid</b> integer, sender player's id.
-* <b>args.message</b> equals to <b>args</b> in request.
+* <b>args.heroid</b> integer, sender's hero id.
 
 ### TODO: OTHER EVENTS
