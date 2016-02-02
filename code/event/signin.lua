@@ -48,7 +48,9 @@ M.fire = function(args, sess, data)
   local sql = 'SELECT id FROM player WHERE userid = %d'
   local player = data.queryone(sql, userid)
   if not player then
-    throw(code.SIGNIN_UNAUTH)
+    local sql = 'INSERT INTO player(userid) VALUES(%d)'
+    local id = data.insert(sql, userid)
+    player = {id = id}
   end
   local ok, err = sess.red:sismember(const.KEY_SESSION, player.id)
   if not ok then
