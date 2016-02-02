@@ -1,21 +1,27 @@
 # Description
+<pre>
 A websocket game server template running on
 <a href="http://openresty.org" target="_blank">OpenResty</a> (version: 1.9.7.2+)
 <a href="http://redis.io" target="_blank">Redis</a> (version: 2.0.0+)
 Mysql (version: 5.5+).
+</pre>
 
 ## Request json format
+<pre>
 FORMAT: {"id": xxx, "event": "xxx", "args": xxx}
 * <b>id</b>: integer, client specified event id which will be returned unchanged.
 * <b>event</b>: string, event name, such as 'signin', 'ping', etc.
 * <b>args</b>: any, arguments of this event, <b>NULLABLE</b>.
+</pre>
 
 ## Response json format
+<pre>
 FORMAT: {"id": xxx, "event": "xxx", "args": xxx, "err": xxx}
 * <b>id</b>: integer, client specified event id or <b>0</b> on broadcasting.
 * <b>event</b>: string, event name, such as 'signin', 'ping', etc.
 * <b>args</b>: any, arguments of this event, <b>NULLABLE</b>.
 * <b>err</b>: integer, error code, <b>NULLABLE</b>.
+</pre>
 
 ## Error code
 <pre>
@@ -35,28 +41,31 @@ SIGNIN_UNAUTH = 2002, -- sid unauthorized
 ## Event list
 
 ### ping
+<pre>
 Ping event to keep the current connection.
 This event should be sent only if sign in completed.
 Idle connections will be closed within several seconds (actually 5 times of read timeout).
 
 FORMAT: {"id": xxx, "event": "ping", "args": xxx}
-* <b>args</b> can be omitted (better)
+<b>args</b> can be omitted (better)
 
 ### signin
 Sign in should be the first event sent to server.
 Connection will be closed on any errors.
 
 FORMAT: {"id": xxx, "event": "signin", "args": {"sid": "xxx"}}
-* <b>sid</b> is a string obtained from gate server
+<b>sid</b> is a string obtained from gate server
+</pre>
 
 ### send
+<pre>
 Send a hero.
 
 FORMAT: {"id": xxx, "event": "send", "args": {"heroid": xxx}}
-* <b>heroid</b> hero id to be sent.
+<b>heroid</b> hero id to be sent.
 
 BROADCAST: {"id": 0, "event": "send", "args": {"playerid": xxx, "heroid": xxx}
-* <b>args.playerid</b> integer, sender player's id.
-* <b>args.heroid</b> integer, sender's hero id.
-
+<b>args.playerid</b> integer, sender player's id.
+<b>args.heroid</b> integer, sender's hero id.
+</pre>
 ### TODO: OTHER EVENTS
