@@ -77,12 +77,12 @@ return function()
       return
     end
     db:set_timeout(config.mysql.timeout)
-    local ret, err, errno, sqlstate = db:connect(config.mysql.datasource)
+    local ret, err = db:connect(config.mysql.datasource)
     if not ret then
       ngx.log(ngx.ERR, 'failed to connect to mysql: ', err)
       return
     end
-    local ret, err, errno, sqlstate = db:query('START TRANSACTION')
+    local ret, err = db:query('START TRANSACTION')
     if not ret then
       ngx.log(ngx.ERR, 'failed to start mysql transaction: ', err)
       return
@@ -104,6 +104,7 @@ return function()
 
   -- listen to event
   local function listen()
+    -- redis for event listening
     local red, err = redis:new()
     if not red then
       ngx.log(ngx.ERR, 'failed to new sub redis: ', err)
@@ -116,7 +117,6 @@ return function()
       return
     end
     M.sub = red
-
     -- extract channels
     local function channel()
       local t = {}
@@ -129,7 +129,7 @@ return function()
       end
       return t
     end
-
+    -- make a thread for event listening
     return ngx.thread.spawn(function()
       M.sub:subscribe(unpack(channel()))
       M.sema:post(1)
@@ -144,7 +144,7 @@ return function()
             M.close()
           else
             local bs, err = M.sock:send_text(ret[3])
-            if M.sock.fatal then
+            if not bs then
               ngx.log(ngx.ERR, 'failed to send text: ', err)
               M.close()
             end
@@ -156,27 +156,27 @@ return function()
 
   -- start session
   M.start = function()
+    -- init semaphore
     local sema, err = semaphore.new()
     if not sema then
       ngx.log(ngx.ERR, 'failed to create semaphore: ', err)
       ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
     M.sema = sema
-
     -- register callback of client-closing-connection event
     local ok, err = ngx.on_abort(M.close)
     if not ok then
       ngx.log(ngx.ERR, 'failed to register the on_abort callback: ', err)
       ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
-
+    -- create socket
     local sock, err = server:new(config.websocket)
     if not sock then
       ngx.log(ngx.ERR, 'failed to new websocket: ', err)
       ngx.exit(ngx.HTTP_CLOSE)
     end
     M.sock = sock
-
+    -- redis for data operation & publishing
     local red, err = redis:new()
     if not red then
       ngx.log(ngx.ERR, 'failed to new redis: ', err)
@@ -189,14 +189,16 @@ return function()
       ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
     M.red = red
-
+    -- message loop
     while not M.closed do
+      -- TODO idle
       local message, typ, err = M.sock:recv_frame()
       if M.sock.fatal then
         ngx.log(ngx.ERR, 'failed to receive frame: ', err)
         M.close()
         break
       end
+      -- message processing
       if typ == 'close' then M.close() break end
       if typ == 'text' then
         local ok, ret = pcall(function() return cjson.decode(message) end)
@@ -206,7 +208,6 @@ return function()
           M.close()
           break
         end
-
         -- start transaction only if tx attribute set
         local db
         if event[name].tx then
@@ -215,7 +216,6 @@ return function()
         end
         local ok, ret = pcall(function() return event[name].fire(args, M, data(db)) end)
         txend(db, ok)
-
         -- begin listen event when signin done
         if ok and name == 'signin' and M.id > 0 then
           M.t_sub = listen()
@@ -225,7 +225,6 @@ return function()
             M.close()
           end
         end
-
         -- dispatch event
         local resp = { id = id, event = name }
         if not ok then
@@ -248,7 +247,6 @@ return function()
         end
       end
     end
-
     -- clean up
     if M.t_sub then
       local ok, res = ngx.thread.wait(M.t_sub)

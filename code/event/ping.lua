@@ -1,6 +1,6 @@
 local M = { channel = 'self', key = 'ping', tx = false }
 
-M.fire = function(args, sess, data)
+M.fire = function(args)
   return args
 end
 

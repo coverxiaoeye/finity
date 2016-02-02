@@ -1,6 +1,6 @@
 local M = { channel = 'group', key = 'send', tx = false }
 
-M.fire = function(args, sess, data)
+M.fire = function(args, sess)
   local heroid = args.heroid
   return
   {
