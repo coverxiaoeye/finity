@@ -1,10 +1,10 @@
 return
 {
-  ping = require('event.ping'),
-  signin = require('event.signin'),
-  send = require('event.send'),
-  -- events fired by server (without 'fire' function)
-  error = { channel = 'self', key = 'error' },
-  close = { close = 'self', key = 'close' },
-  move = { channel = 'group', key = 'move' },
+  -- server side events
+  'error', 'retry', 'sync',
+  -- client side events {module, transactional}
+  ping = { require('event.ping'), false },
+  signin = { require('event.signin'), true },
+  match = { require('event.match'), false },
+  send = { require('event.send'), false },
 }

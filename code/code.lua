@@ -4,7 +4,6 @@ return
   MYSQL = 1, -- mysql query error
   REDIS = 2, -- redis command error
   HTTP = 3, -- http request error
-  INVALID_EVENT = 11, -- event not defined
 
   LOCK = 1001, -- mysql optimistic lock
   WATCH = 1002, -- redis transaction error

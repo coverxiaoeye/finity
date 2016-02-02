@@ -22,7 +22,7 @@ return function()
     red = nil,
     sema = nil,
     t_sub = nil,
-    t_match = nil,
+    t_play = nil,
   }
 
   -- close session
@@ -41,31 +41,34 @@ return function()
     -- TODO logic clean up
   end
 
-  -- dispatch event
-  M.dispatch = function(resp)
-    local name, keys = resp.event, {}
-    if event[name].channel == 'self' then
-      keys[#keys + 1] = event[name].key .. '/' .. M.id
-    elseif event[name].channel == 'all' then
-      resp.id = 0
-      keys[#keys + 1] = event[name].key
-    elseif event[name].channel == 'group' then
-      resp.id = 0
-      local ids, err = M.red:smembers(const.KEY_GROUP .. '/' .. M.group)
-      if not ids then
-        ngx.log(ngx.ERR, 'failed to read members: ', err)
-        throw(code.REDIS)
-      end
-      for _, id in ipairs(ids) do
-        keys[#keys + 1] = event[name].key .. '/' .. id
-      end
+  M.singlecast = function(playerid, resp)
+    ngx.log(ngx.DEBUG, 'SINGLE CAST: ', cjson.encode(resp))
+    local ok, err = M.red:publish(resp.event .. '/' .. playerid, cjson.encode(resp))
+    if not ok then
+      ngx.log(ngx.ERR, 'failed to publish: ', err)
+      throw(code.REDIS)
     end
-    for _, key in ipairs(keys) do
-      local ok, err = M.red:publish(key, cjson.encode(resp))
-      if not ok then
-        ngx.log(ngx.ERR, 'failed to publish: ', err)
-        throw(code.REDIS)
-      end
+  end
+
+  M.groupcast = function(resp)
+    local ids, err = M.red:smembers(const.KEY_GROUP .. '/' .. M.group)
+    if not ids then
+      ngx.log(ngx.ERR, 'failed to read members: ', err)
+      throw(code.REDIS)
+    end
+    for _, id in ipairs(ids) do
+      M.singlecast(id, resp)
+    end
+  end
+
+  M.broadcast = function(resp)
+    local ids, err = M.red:smembers(const.KEY_SESSION)
+    if not ids then
+      ngx.log(ngx.ERR, 'failed to read members: ', err)
+      throw(code.REDIS)
+    end
+    for _, id in ipairs(ids) do
+      M.singlecast(id, resp)
     end
   end
 
@@ -117,21 +120,18 @@ return function()
       return
     end
     M.sub = red
-    -- extract channels
-    local function channel()
+    -- extract events
+    local function events()
       local t = {}
-      for _, v in pairs(event) do
-        if v.channel == 'self' or v.channel == 'group' then
-          t[#t + 1] = v.key .. '/' .. M.id
-        elseif v.channel == 'all' then
-          t[#t + 1] = v.key
-        end
+      for k, v in pairs(event) do
+        t[#t + 1] = (type(k) == 'number' and v or k) .. '/' .. M.id
       end
       return t
     end
+
     -- make a thread for event listening
     return ngx.thread.spawn(function()
-      M.sub:subscribe(unpack(channel()))
+      M.sub:subscribe(unpack(events()))
       M.sema:post(1)
       while not M.closed do
         local ret, err = M.sub:read_reply()
@@ -140,14 +140,11 @@ return function()
           M.close()
         end
         if ret and ret[1] == 'message' then
-          if ret[2] == 'close/' .. M.id then
+          ngx.log(ngx.DEBUG, 'MESSAGE SENT: ', ret[3])
+          local bs, err = M.sock:send_text(ret[3])
+          if not bs then
+            ngx.log(ngx.ERR, 'failed to send text: ', err)
             M.close()
-          else
-            local bs, err = M.sock:send_text(ret[3])
-            if not bs then
-              ngx.log(ngx.ERR, 'failed to send text: ', err)
-              M.close()
-            end
           end
         end
       end
@@ -201,64 +198,54 @@ return function()
       -- message processing
       if typ == 'close' then M.close() break end
       if typ == 'text' then
-        local ok, ret = pcall(function() return cjson.decode(message) end)
+        local ok, req = pcall(function() return cjson.decode(message) end)
         if not ok then M.close() break end
-        local id, name, args = ret.id, ret.event, ret.args
-        if not name or not event[name] or not event[name].fire or (M.id == 0 and name ~= 'signin') then
+        local name = req.event
+        if not name or not event[name] or (M.id == 0 and name ~= 'signin') then
           M.close()
           break
         end
-        -- start transaction only if tx attribute set
+        -- start transaction
         local db
-        if event[name].tx then
+        if event[name][2] then
           db = txbegin()
-          if not db then txend(db, false) M.close() break end
+          if not db then txend(db) M.close() break end
         end
-        local ok, ret = pcall(function() return event[name].fire(args, M, data(db)) end)
+        local ok, err = pcall(function()
+          local func = event[name][1]
+          func(req, M, data(db))
+        end)
         txend(db, ok)
         -- begin listen event when signin done
         if ok and name == 'signin' and M.id > 0 then
           M.t_sub = listen()
-          local done, err = M.sema:wait(1) -- wait for redis connection within 1 second at most
+          local done, err = M.sema:wait(3) -- wait for redis connection within 3 second at most
           if not done then
-            ngx.log(ngx.ERR, 'failed to wait listener start: ', ret)
-            M.close()
-          end
-        end
-        -- dispatch event
-        local resp = { id = id, event = name }
-        if not ok then
-          ngx.log(ngx.ERR, 'error occurred: ', ret)
-          local idx = string.find(ret, '{', 1, true)
-          local errcode = idx and loadstring('return ' .. string.sub(ret, idx))().err or code.UNKNOWN
-          ngx.log(ngx.ERR, 'failed to fire event: ', message, ', errcode: ', errcode)
-          if errcode < 1000 then
+            ngx.log(ngx.ERR, 'failed to wait listener start: ', err)
             M.close()
           else
-            resp.event, resp.err = 'error', errcode
+            M.singlecast(M.id, { id = req.id, event = name, args = { id = M.id } })
           end
-        else
-          resp.args = ret
         end
-
-        if not M.closed then
-          local done = pcall(function() M.dispatch(resp) end)
-          if not done then M.close() end
+        if not ok then
+          ngx.log(ngx.ERR, 'error occurred: ', err)
+          local idx = string.find(err, '{', 1, true)
+          local errcode = idx and loadstring('return ' .. string.sub(err, idx))().err or code.UNKNOWN
+          ngx.log(ngx.ERR, 'failed to fire event: ', message, ', errcode: ', errcode)
+          if errcode < 1000 or errcode == code.SIGNIN_ALREADY then
+            M.close()
+          else
+            M.singlecast(M.id, { id = 0, event = 'error', args = { code = errcode } })
+          end
         end
       end
     end
     -- clean up
-    if M.t_sub then
-      local ok, res = ngx.thread.wait(M.t_sub)
-      if not ok then
-        ngx.log(ngx.ERR, 'failed to wait sub thread: ', res)
-      end
+    if M.t_play then
+      ngx.thread.kill(M.t_play)
     end
-    if M.t_match then
-      local ok, res = ngx.thread.wait(M.t_match)
-      if not ok then
-        ngx.log(ngx.ERR, 'failed to wait match thread: ', res)
-      end
+    if M.t_sub then
+      ngx.thread.wait(M.t_sub)
     end
     if M.red then
       M.red:close()

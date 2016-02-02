@@ -4,15 +4,12 @@ local throw = require('throw')
 local const = require('const')
 local config = require('config')
 local http = require('resty.http')
-local match = require('thread.match')
 
-local M = { channel = 'self', key = 'signin', tx = true }
-
-M.fire = function(args, sess, data)
+return function(req, sess, data)
   if sess.id > 0 then
     throw(code.SIGNIN_ALREADY)
   end
-  local sid = args.sid
+  local sid = req.args.sid
 
   local httpc = http:new()
   httpc:set_timeout(config.gate.timeout)
@@ -50,7 +47,7 @@ M.fire = function(args, sess, data)
   if not player then
     local sql = 'INSERT INTO player(userid) VALUES(%d)'
     local id = data.insert(sql, userid)
-    player = {id = id}
+    player = { id = id }
   end
   local ok, err = sess.red:sismember(const.KEY_SESSION, player.id)
   if not ok then
@@ -65,19 +62,5 @@ M.fire = function(args, sess, data)
     ngx.log(ngx.ERR, 'failed to do sadd: ', err)
     throw(code.REDIS)
   end
-
-  --TODO for match demo
-  local groupid = 1
-  local ok, err = sess.red:sadd(const.KEY_GROUP .. '/' .. groupid, player.id)
-  if not ok then
-    ngx.log(ngx.ERR, 'failed to do sadd: ', err)
-    throw(code.REDIS)
-  end
   sess.id = player.id
-  sess.group = groupid
-  sess.match = ngx.thread.spawn(match, sess)
-
-  return player
 end
-
-return M
