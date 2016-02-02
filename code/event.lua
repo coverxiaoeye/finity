@@ -1,7 +1,7 @@
 return
 {
   -- server side events
-  'error', 'retry', 'sync',
+  'error', 'retry', 'sync', 'over',
   -- client side events {module, transactional}
   ping = { require('event.ping'), false },
   signin = { require('event.signin'), true },

@@ -14,26 +14,47 @@ return function()
 
   local M =
   {
-    id = 0,
-    group = 0,
+    id = nil,
     closed = false,
     sock = nil,
     sub = nil,
     red = nil,
     sema = nil,
     t_sub = nil,
-    t_play = nil,
   }
 
   -- close session
   M.close = function()
     M.closed = true
     if M.red then
-      local ok, err = M.red:srem(const.KEY_SESSION, M.id)
-      if not ok then
-        ngx.log(ngx.FATAL, 'failed to do srem: ', err)
+      local group, err = M.red:hget(const.KEY_PLAYER .. '/' .. M.id, 'group')
+      if not group then
+        ngx.log(ngx.FATAL, 'failed to do hget: ', err)
       end
-      local ok, err = M.red:srem(const.KEY_GROUP .. '/' .. M.group, M.id)
+      if group ~= ngx.null then
+        local member, err = M.red:hget(const.KEY_GROUP .. '/' .. group, 'member')
+        if not member then
+          ngx.log(ngx.FATAL, 'failed to do srem: ', err)
+        end
+        local playerids = cjson.decode(member)
+        playerids[M.id] = nil
+        if next(playerids) then
+          local ok, err = M.red:hmset(const.KEY_GROUP .. '/' .. group, 'state', 'quit', 'member', cjson.encode(playerids))
+          if not ok then
+            ngx.log(ngx.FATAL, 'failed to do del: ', err)
+          end
+        else
+          local ok, err = M.red:del(const.KEY_GROUP .. '/' .. group)
+          if not ok then
+            ngx.log(ngx.FATAL, 'failed to do del: ', err)
+          end
+        end
+      end
+      local ok, err = M.red:del(const.KEY_PLAYER .. '/' .. M.id)
+      if not ok then
+        ngx.log(ngx.FATAL, 'failed to do del: ', err)
+      end
+      local ok, err = M.red:srem(const.KEY_SESSION, M.id)
       if not ok then
         ngx.log(ngx.FATAL, 'failed to do srem: ', err)
       end
@@ -42,7 +63,6 @@ return function()
   end
 
   M.singlecast = function(playerid, resp)
-    ngx.log(ngx.DEBUG, 'SINGLE CAST: ', cjson.encode(resp))
     local ok, err = M.red:publish(resp.event .. '/' .. playerid, cjson.encode(resp))
     if not ok then
       ngx.log(ngx.ERR, 'failed to publish: ', err)
@@ -51,24 +71,31 @@ return function()
   end
 
   M.groupcast = function(resp)
-    local ids, err = M.red:smembers(const.KEY_GROUP .. '/' .. M.group)
-    if not ids then
-      ngx.log(ngx.ERR, 'failed to read members: ', err)
-      throw(code.REDIS)
+    local group, err = M.red:hget(const.KEY_PLAYER .. '/' .. M.id, const.KEY_GROUP)
+    if not group then
+      ngx.log(ngx.FATAL, 'failed to do hget: ', err)
     end
-    for _, id in ipairs(ids) do
-      M.singlecast(id, resp)
+    if group == ngx.null then
+      return
+    end
+    local member, err = M.red:hget(const.KEY_GROUP .. '/' .. group, 'member')
+    if not member then
+      ngx.log(ngx.FATAL, 'failed to do srem: ', err)
+    end
+    local playerids = cjson.decode(member)
+    for playerid, _ in pairs(playerids) do
+      M.singlecast(playerid, resp)
     end
   end
 
   M.broadcast = function(resp)
-    local ids, err = M.red:smembers(const.KEY_SESSION)
-    if not ids then
-      ngx.log(ngx.ERR, 'failed to read members: ', err)
+    local playerids, err = M.red:smembers(const.KEY_SESSION)
+    if not playerids then
+      ngx.log(ngx.ERR, 'failed to do smembers: ', err)
       throw(code.REDIS)
     end
-    for _, id in ipairs(ids) do
-      M.singlecast(id, resp)
+    for _, playerid in ipairs(playerids) do
+      M.singlecast(playerid, resp)
     end
   end
 
@@ -140,7 +167,6 @@ return function()
           M.close()
         end
         if ret and ret[1] == 'message' then
-          ngx.log(ngx.DEBUG, 'MESSAGE SENT: ', ret[3])
           local bs, err = M.sock:send_text(ret[3])
           if not bs then
             ngx.log(ngx.ERR, 'failed to send text: ', err)
@@ -201,7 +227,7 @@ return function()
         local ok, req = pcall(function() return cjson.decode(message) end)
         if not ok then M.close() break end
         local name = req.event
-        if not name or not event[name] or (M.id == 0 and name ~= 'signin') then
+        if not name or not event[name] or (not M.id and name ~= 'signin') then
           M.close()
           break
         end
@@ -217,7 +243,7 @@ return function()
         end)
         txend(db, ok)
         -- begin listen event when signin done
-        if ok and name == 'signin' and M.id > 0 then
+        if ok and name == 'signin' and M.id then
           M.t_sub = listen()
           local done, err = M.sema:wait(3) -- wait for redis connection within 3 second at most
           if not done then
@@ -241,9 +267,6 @@ return function()
       end
     end
     -- clean up
-    if M.t_play then
-      ngx.thread.kill(M.t_play)
-    end
     if M.t_sub then
       ngx.thread.wait(M.t_sub)
     end

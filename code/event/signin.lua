@@ -6,7 +6,7 @@ local config = require('config')
 local http = require('resty.http')
 
 return function(req, sess, data)
-  if sess.id > 0 then
+  if sess.id then
     throw(code.SIGNIN_ALREADY)
   end
   local sid = req.args.sid
@@ -62,5 +62,5 @@ return function(req, sess, data)
     ngx.log(ngx.ERR, 'failed to do sadd: ', err)
     throw(code.REDIS)
   end
-  sess.id = player.id
+  sess.id = tostring(player.id)
 end

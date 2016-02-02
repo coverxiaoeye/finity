@@ -8,6 +8,8 @@ return
   LOCK = 1001, -- mysql optimistic lock
   WATCH = 1002, -- redis transaction error
 
+  ILLEGAL = 2000, -- illegal access
+
   SIGNIN_ALREADY = 2001, -- already signed in
   SIGNIN_UNAUTH = 2002, -- sid unauthorized
 }
