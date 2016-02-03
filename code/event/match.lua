@@ -31,7 +31,6 @@ return function(req, sess)
     end
     retry = retry + 1
     if retry < 2 then
-      ngx.sleep(sleep)
       local resp =
       {
         id = 0,
@@ -39,6 +38,7 @@ return function(req, sess)
         args = { n = retry, sleep = sleep }
       }
       sess.singlecast(sess.id, resp)
+      ngx.sleep(sleep)
     end
   end
   if not groupid then
