@@ -1,12 +1,11 @@
 return
 {
-  UNKNOWN = -1, -- unknown error (bugs, json decoding, etc.)
-  MYSQL = 1, -- mysql query error
-  REDIS = 2, -- redis command error
+  UNKNOWN = -1, --未知错误(一般为程序BUG)
+  MYSQL = 1, --mysql操作异常
+  REDIS = 2, --redis操作异常
+  HTTP = 3, --http访问异常
 
-  INVALID_EVENT = 11, -- event not defined
-
-  SIGNIN_ALREADY = 1001, -- already signed in
-  SIGNIN_UNAUTH = 1002, -- sid unauthorized
+  LOCK = 1001, --mysql数据并发
+  ILLEGAL = 2000, --非法访问,请求不合法(一般为程序BUG)
+  SIGNIN_ALREADY = 2001, --已登录
 }
-

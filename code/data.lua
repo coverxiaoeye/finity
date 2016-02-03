@@ -3,6 +3,7 @@ local code = require('code')
 local throw = require('throw')
 local config = require('config')
 
+--mysql操作工具
 return function(db)
   local M = { db = db }
 
@@ -74,14 +75,22 @@ return function(db)
       throw(code.MYSQL)
     end
     for _, v in ipairs(ps) do
-      local us = {}
+      local sets, us = {}, {}
       for i, vv in ipairs(v) do
-        ret, err, errno, sqlstate = M.db:query('SET @p' .. i .. ' = ' .. vv)
+        sets[#sets + 1] = 'SET @p' .. i .. ' = ' .. vv .. ';'
+        us[#us + 1] = '@p' .. i
+      end
+      ret, err, errno, sqlstate = M.db:query(table.concat(sets, ''))
+      if not ret then
+        ngx.log(ngx.ERR, 'failed to mysql set: ', err)
+        throw(code.MYSQL)
+      end
+      while err == 'again' do
+        ret, err, errno, sqlstate = M.db:read_result()
         if not ret then
           ngx.log(ngx.ERR, 'failed to mysql set: ', err)
           throw(code.MYSQL)
         end
-        table.insert(us, '@p' .. i)
       end
       ret, err, errno, sqlstate = M.db:query('EXECUTE data_updates USING ' .. table.concat(us, ','))
       if not ret then
@@ -113,21 +122,29 @@ return function(db)
       throw(code.MYSQL)
     end
     for _, v in ipairs(ps) do
-      local us = {}
+      local sets, us = {}, {}
       for i, vv in ipairs(v) do
-        ret, err, errno, sqlstate = M.db:query('SET @p' .. i .. ' = ' .. vv)
+        sets[#sets + 1] = 'SET @p' .. i .. ' = ' .. vv .. ';'
+        us[#us + 1] = '@p' .. i
+      end
+      ret, err, errno, sqlstate = M.db:query(table.concat(sets, ''))
+      if not ret then
+        ngx.log(ngx.ERR, 'failed to mysql set: ', err)
+        throw(code.MYSQL)
+      end
+      while err == 'again' do
+        ret, err, errno, sqlstate = M.db:read_result()
         if not ret then
           ngx.log(ngx.ERR, 'failed to mysql set: ', err)
           throw(code.MYSQL)
         end
-        table.insert(us, '@p' .. i)
       end
       ret, err, errno, sqlstate = M.db:query('EXECUTE data_inserts USING ' .. table.concat(us, ','))
       if not ret then
         ngx.log(ngx.ERR, 'failed to mysql execute: ', err)
         throw(code.MYSQL)
       end
-      table.insert(ids, ret.insert_id)
+      ids[#ids + 1] = ret.insert_id
     end
     ret, err, errno, sqlstate = M.db:query('DEALLOCATE PREPARE data_inserts')
     if not ret then

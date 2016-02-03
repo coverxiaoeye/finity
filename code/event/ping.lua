@@ -1,7 +1,3 @@
-local M = { channel = 'self', key = 'ping' }
-
-M.fire = function(args, sess, data, red)
-  return args
+return function(req, sess)
+  sess.singlecast(sess.id, { id = req.id, event = req.event, args = req.args })
 end
-
-return M
