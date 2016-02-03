@@ -1,37 +1,25 @@
-local cjson = require('cjson')
+local codec = require('codec')
 local code = require('code')
 local throw = require('throw')
 local const = require('const')
 
 return function(req, sess)
   local heroid = req.args.heroid
-  local red = sess.red
+  local kv = sess.kv
 
-  local groupid, err = red:hget(const.KEY_PLAYER .. '/' .. sess.id, const.KEY_GROUP)
-  if not groupid then
-    ngx.log(ngx.ERR, 'failed to do hget: ', err)
-    throw(code.REDIS)
-  end
+  local groupid = kv.call('hget', const.player(sess.id), 'group')
   if groupid == ngx.null then
     throw(code.ILLEGAL)
   end
 
-  local ok, err = red:hgetall(const.KEY_GROUP .. '/' .. groupid)
-  if not ok then
-    ngx.log(ngx.ERR, 'failed to do hgetall: ', err)
-    throw(code.REDIS)
-  end
-  local group = red:array_to_hash(ok)
+  local ret = kv.call('hgetall', const.group(groupid))
+  local group = kv.rawcall('array_to_hash', ret)
   if group.state ~= 'begin' then
     throw(code.ILLEGAL)
   end
-  local playerids = cjson.decode(group.member)
+  local ids = codec.dec(group.member)
+  kv.call('rpush', const.hero(groupid), heroid)
 
-  local ok, err = red:rpush(const.KEY_HERO .. '/' .. groupid, heroid)
-  if not ok then
-    ngx.log(ngx.ERR, 'failed to do rpush: ', err)
-    throw(code.REDIS)
-  end
   local resp =
   {
     id = req.id,
@@ -45,7 +33,7 @@ return function(req, sess)
     event = req.event,
     args = { playerid = sess.id, heroid = heroid }
   }
-  for playerid, _ in pairs(playerids) do
-    sess.singlecast(playerid, resp)
+  for _, v in pairs(ids) do
+    sess.singlecast(v, resp)
   end
 end

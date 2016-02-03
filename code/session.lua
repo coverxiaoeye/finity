@@ -1,24 +1,26 @@
+local cjson = require('cjson')
+local codec = require('codec')
+local remove = require('remove')
+local server = require('resty.websocket.server')
+local mysql = require('resty.mysql')
+local redis = require('resty.redis')
+local semaphore = require('ngx.semaphore')
+
+local code = require('code')
+local config = require('config')
+local data = require('data')
+local kv = require('kv')
+local event = require('event')
+local const = require('const')
+
 return function()
-  local cjson = require('cjson')
-  local server = require('resty.websocket.server')
-  local mysql = require('resty.mysql')
-  local redis = require('resty.redis')
-  local semaphore = require('ngx.semaphore')
-
-  local code = require('code')
-  local throw = require('throw')
-  local config = require('config')
-  local data = require('data')
-  local event = require('event')
-  local const = require('const')
-
   local M =
   {
     id = nil,
     closed = false,
     sock = nil,
+    kv = nil,
     sub = nil,
-    red = nil,
     sema = nil,
     t_sub = nil,
   }
@@ -26,76 +28,46 @@ return function()
   -- close session
   M.close = function()
     M.closed = true
-    if M.red then
-      local group, err = M.red:hget(const.KEY_PLAYER .. '/' .. M.id, 'group')
-      if not group then
-        ngx.log(ngx.FATAL, 'failed to do hget: ', err)
-      end
-      if group ~= ngx.null then
-        local member, err = M.red:hget(const.KEY_GROUP .. '/' .. group, 'member')
-        if not member then
-          ngx.log(ngx.FATAL, 'failed to do srem: ', err)
-        end
-        local playerids = cjson.decode(member)
-        playerids[M.id] = nil
-        if next(playerids) then
-          local ok, err = M.red:hmset(const.KEY_GROUP .. '/' .. group, 'state', 'quit', 'member', cjson.encode(playerids))
-          if not ok then
-            ngx.log(ngx.FATAL, 'failed to do del: ', err)
-          end
+    if M.kv then
+      local playerkey = const.player(M.id)
+      local group = M.kv.rawcall('hget', playerkey, 'group')
+      if group and group ~= ngx.null then
+        local groupkey = const.group(group)
+        local member = M.kv.rawcall('hget', groupkey, 'member')
+        local ids = codec.dec(member)
+        remove(ids, M.id)
+        if next(ids) then
+          M.kv.rawcall('hmset', groupkey, 'state', 'quit', 'member', codec.enc(ids))
         else
-          local ok, err = M.red:del(const.KEY_GROUP .. '/' .. group)
-          if not ok then
-            ngx.log(ngx.FATAL, 'failed to do del: ', err)
-          end
+          M.kv.rawcall('del', groupkey)
         end
       end
-      local ok, err = M.red:del(const.KEY_PLAYER .. '/' .. M.id)
-      if not ok then
-        ngx.log(ngx.FATAL, 'failed to do del: ', err)
-      end
-      local ok, err = M.red:srem(const.KEY_SESSION, M.id)
-      if not ok then
-        ngx.log(ngx.FATAL, 'failed to do srem: ', err)
-      end
+      M.kv.rawcall('del', playerkey)
+      M.kv.rawcall('srem', const.session(), M.id)
     end
     -- TODO logic clean up
   end
 
   M.singlecast = function(playerid, resp)
-    local ok, err = M.red:publish(resp.event .. '/' .. playerid, cjson.encode(resp))
-    if not ok then
-      ngx.log(ngx.ERR, 'failed to publish: ', err)
-      throw(code.REDIS)
-    end
+    M.kv.call('publish', resp.event .. '/' .. playerid, cjson.encode(resp))
   end
 
   M.groupcast = function(resp)
-    local group, err = M.red:hget(const.KEY_PLAYER .. '/' .. M.id, const.KEY_GROUP)
-    if not group then
-      ngx.log(ngx.FATAL, 'failed to do hget: ', err)
-    end
+    local group = M.kv.call('hget', const.player(M.id), 'group')
     if group == ngx.null then
       return
     end
-    local member, err = M.red:hget(const.KEY_GROUP .. '/' .. group, 'member')
-    if not member then
-      ngx.log(ngx.FATAL, 'failed to do srem: ', err)
-    end
-    local playerids = cjson.decode(member)
-    for playerid, _ in pairs(playerids) do
-      M.singlecast(playerid, resp)
+    local member = M.kv.call('hget', const.group(group), 'member')
+    local ids = cjson.decode(member)
+    for _, v in ipairs(ids) do
+      M.singlecast(v, resp)
     end
   end
 
   M.broadcast = function(resp)
-    local playerids, err = M.red:smembers(const.KEY_SESSION)
-    if not playerids then
-      ngx.log(ngx.ERR, 'failed to do smembers: ', err)
-      throw(code.REDIS)
-    end
-    for _, playerid in ipairs(playerids) do
-      M.singlecast(playerid, resp)
+    local ids = M.kv.call('smembers', const.session())
+    for _, v in ipairs(ids) do
+      M.singlecast(v, resp)
     end
   end
 
@@ -211,7 +183,7 @@ return function()
       ngx.log(ngx.ERR, 'failed to connect to redis: ', err)
       ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
-    M.red = red
+    M.kv = kv(red)
     -- message loop
     while not M.closed do
       -- TODO idle
@@ -270,8 +242,8 @@ return function()
     if M.t_sub then
       ngx.thread.wait(M.t_sub)
     end
-    if M.red then
-      M.red:close()
+    if M.kv then
+      M.kv.red:close()
     end
     if M.sub then
       M.sub:close()

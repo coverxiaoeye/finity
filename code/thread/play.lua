@@ -1,16 +1,12 @@
 local cjson = require('cjson')
+local codec = require('codec')
 local redis = require('resty.redis')
+local kv = require('kv')
 local config = require('config')
-local code = require('code')
-local throw = require('throw')
 local const = require('const')
 
-local function singlecast(red, playerid, resp)
-  local ok, err = red:publish(resp.event .. '/' .. playerid, cjson.encode(resp))
-  if not ok then
-    ngx.log(ngx.ERR, 'failed to do publish: ', err)
-    throw(code.REDIS)
-  end
+local function singlecast(kv, playerid, resp)
+  kv.call('publish', resp.event .. '/' .. playerid, cjson.encode(resp))
 end
 
 return function(premature, groupid)
@@ -28,29 +24,21 @@ return function(premature, groupid)
     ngx.log(ngx.ERR, 'failed to connect to redis: ', err)
     return
   end
+  local kv = kv(red)
 
   -- 3 minutes game, 5 second to sync data
-  local key = const.KEY_GROUP .. '/' .. groupid
+  local groupkey, herokey, ids = const.group(groupid), const.hero(groupid), nil
   while true do
-    local ok, err = red:hgetall(key)
-    if not ok then
-      ngx.log(ngx.ERR, 'failed to do hgetall: ', err)
-      throw(code.REDIS)
-    end
-    local group = red:array_to_hash(ok)
+    local ret = kv.call('hgetall', groupkey)
+    local group = kv.rawcall('array_to_hash', ret)
+    ids = codec.dec(group.member)
     if group.state == 'quit' then
       break
     end
-    local playerids = cjson.decode(group.member)
 
     ngx.sleep(5)
-    local ok, err = red:lrange(const.KEY_HERO .. '/' .. groupid, 0, -1)
-    if not ok then
-      ngx.log(ngx.ERR, 'failed to do lrange: ', err)
-      throw(code.REDIS)
-    end
-    local heroids = {}
-    for _, v in ipairs(ok) do
+    local ret, heroids = kv.call('lrange', herokey, 0, -1), {}
+    for _, v in ipairs(ret) do
       heroids[#heroids + 1] = tonumber(v)
     end
     local resp =
@@ -59,44 +47,24 @@ return function(premature, groupid)
       event = 'sync',
       args = { heroids = heroids }
     }
-    for playerid, _ in pairs(playerids) do
-      singlecast(red, playerid, resp)
+    for _, v in pairs(ids) do
+      singlecast(kv, v, resp)
     end
   end
-
-  local ok, err = red:hgetall(key)
-  if not ok then
-    ngx.log(ngx.ERR, 'failed to do hgetall: ', err)
-    throw(code.REDIS)
-  end
-  local group = red:array_to_hash(ok)
-  local playerids = cjson.decode(group.member)
 
   local resp =
   {
     id = 0,
     event = 'over'
   }
-  for playerid, _ in pairs(playerids) do
-    singlecast(red, playerid, resp)
+  for _, v in pairs(ids) do
+    singlecast(kv, v, resp)
   end
 
-  for playerid, _ in pairs(playerids) do
-    local ok, err = red:hdel(const.KEY_PLAYER .. '/' .. playerid, const.KEY_GROUP)
-    if not ok then
-      ngx.log(ngx.ERR, 'failed to do hdel: ', err)
-      throw(code.REDIS)
-    end
+  for _, v in pairs(ids) do
+    kv.call('hdel', const.player(v), 'group')
   end
-  local ok, err = red:del(key)
-  if not ok then
-    ngx.log(ngx.ERR, 'failed to do del: ', err)
-    throw(code.REDIS)
-  end
-  local ok, err = red:del(const.KEY_HERO .. '/' .. groupid)
-  if not ok then
-    ngx.log(ngx.ERR, 'failed to do del: ', err)
-    throw(code.REDIS)
-  end
-  red:close()
+  kv.call('del', groupkey)
+  kv.call('del', herokey)
+  kv.red:close()
 end

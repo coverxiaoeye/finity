@@ -49,18 +49,9 @@ return function(req, sess, data)
     local id = data.insert(sql, userid)
     player = { id = id }
   end
-  local ok, err = sess.red:sismember(const.KEY_SESSION, player.id)
-  if not ok then
-    ngx.log(ngx.ERR, 'failed to do sismember: ', err)
-    throw(code.REDIS)
-  end
-  if ok == 1 then
+  if 1 == sess.kv.call('sismember', const.session(), player.id) then
     throw(code.SIGNIN_ALREADY)
   end
-  local ok, err = sess.red:sadd(const.KEY_SESSION, player.id)
-  if not ok then
-    ngx.log(ngx.ERR, 'failed to do sadd: ', err)
-    throw(code.REDIS)
-  end
-  sess.id = tostring(player.id)
+  sess.kv.call('sadd', const.session(), player.id)
+  sess.id = player.id
 end
