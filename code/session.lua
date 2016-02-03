@@ -204,9 +204,10 @@ return function()
         break
       elseif typ == 'text' then
         local ok, req = pcall(function() return cjson.decode(message) end)
-        if not ok then --解析消息失败
-        M.close()
-        break
+        --解析消息失败
+        if not ok then
+          M.close()
+          break
         end
         local name = req.event
         --消息不存在或第一个事件不是登录请求
@@ -218,10 +219,11 @@ return function()
         local db
         if event[name][2] then
           db = txbegin()
-          if not db then --开启事务失败则关闭会话
-          txend(db)
-          M.close()
-          break
+          --开启事务失败则关闭会话
+          if not db then
+            txend(db)
+            M.close()
+            break
           end
         end
         local ok, err = pcall(function()
