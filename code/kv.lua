@@ -1,9 +1,11 @@
 local code = require('code')
 local throw = require('throw')
 
+--redis包装
 return function(r)
   local M = { red = r }
 
+  --执行redis命令并做异常处理
   M.call = function(cmd, ...)
     local ok, err = M.red[cmd](M.red, ...)
     if not ok then
@@ -13,6 +15,7 @@ return function(r)
     return ok
   end
 
+  --原生执行redis命令,不做异常处理
   M.rawcall = function(cmd, ...)
     local ok, err = M.red[cmd](M.red, ...)
     if not ok then

@@ -4,16 +4,18 @@ local throw = require('throw')
 local const = require('const')
 local play = require('thread.play')
 
+--快速匹配事件处理
 return function(req, sess)
   local kv = sess.kv
 
+  --确认玩家未在游戏组中
   local playerkey = const.player(sess.id)
   local group = kv.call('hget', playerkey, 'group')
   if group ~= ngx.null then
     throw(code.ILLEGAL)
   end
 
-  -- TODO ugly matching code
+  --遍历所有状态为wait的游戏组, 未找到则等5秒后重试
   local groups = kv.call('keys', const.KEY_GROUP .. '/*')
   local retry, sleep, groupid, group, ids = 0, 5, nil, nil, nil
   while retry < 2 do
@@ -31,25 +33,25 @@ return function(req, sess)
     end
     retry = retry + 1
     if retry < 2 then
-      local resp =
-      {
-        id = 0,
-        event = 'retry',
-        args = { n = retry, sleep = sleep }
-      }
+      --单播重试事件并等5秒
+      local resp = { id = 0, event = 'retry', args = { n = retry, sleep = sleep } }
       sess.singlecast(sess.id, resp)
       ngx.sleep(sleep)
     end
   end
+
   if not groupid then
+    --未找到匹配的游戏则创建一个新的并加入,状态为wait
     groupid = kv.call('incr', const.groupn())
     group = { state = 'wait', member = codec.enc({ sess.id }) }
   else
+    --找到后加入
     ids = codec.dec(group.member)
     ids[#ids + 1] = sess.id
     group = { state = 'begin', member = codec.enc(ids) }
   end
 
+  --更新游戏,处理并发
   local groupkey = const.group(groupid)
   kv.call('watch', playerkey, groupkey)
   kv.call('multi')
@@ -57,25 +59,18 @@ return function(req, sess)
   kv.call('hmset', groupkey, group)
   kv.call('exec')
 
-  local resp =
-  {
-    id = req.id,
-    event = 'match',
-    args = { state = group.state }
-  }
+  --单播处理结果
+  local resp = { id = req.id, event = 'match', args = { state = group.state } }
   sess.singlecast(sess.id, resp)
 
+  --如果游戏状态为开始则启动游戏线程
   if group.state == 'begin' then
-    local resp =
-    {
-      id = 0,
-      event = 'match',
-      args = { state = group.state }
-    }
+    --组播游戏开始事件(效率,未用groupcast)
+    local resp = { id = 0, event = 'match', args = { state = group.state } }
     for _, v in pairs(ids) do
       sess.singlecast(v, resp)
     end
-
+    --启动游戏线程
     ngx.timer.at(0, play, groupid)
   end
 end

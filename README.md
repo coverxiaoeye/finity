@@ -1,39 +1,36 @@
-# Description
+# 摘要
 <pre>
-A websocket game server template running on
+Websocket游戏开发模块,开发语言为Lua,运行环境包括:
 <a href="http://openresty.org" target="_blank">OpenResty</a> (version: 1.9.7.2+)
 <a href="http://redis.io" target="_blank">Redis</a> (version: 2.0.0+)
-Mysql (version: 5.5+).
+<a href="http://mysql.com" target="_blank">Mysql</a> (version: 5.5+).
 </pre>
 
-## Request json format
+## 客户端发送数据格式(JSON)
 <pre>
-FORMAT: {"id": xxx, "event": "xxx", "args": xxx}
-* <b>id</b>: integer, client specified event id which will be returned unchanged.
-* <b>event</b>: string, event name, such as 'signin', 'ping', etc.
-* <b>args</b>: any, arguments of this event, <b>NULLABLE</b>.
+{"id": xxx, "event": "xxx", "args": xxx}
+<b>id</b>: 整型, 事件ID (建议发送, 服务器应做同样的返回以方便客户端做对应)
+<b>event</b>: 字符, 事件名称
+<b>args</b>: 任意, 事件的描述参数, 由事件本身决定, 可为null
 </pre>
 
-## Broadcast json format
+## 服务器广播数据格式(JSON)
 <pre>
-FORMAT: {"id": xxx, "event": "xxx", "args": xxx, "err": xxx}
-* <b>id</b>: integer, client specified event id or <b>0</b> on broadcasting.
-* <b>event</b>: string, event name, such as 'signin', 'ping', etc.
-* <b>args</b>: any, arguments of this event, <b>NULLABLE</b>.
-* <b>code</b>: integer, error code, <b>NULLABLE</b> (only when event == 'error').
+{"id": xxx, "event": "xxx", "args": xxx, "err": xxx}
+<b>id</b>: 整型, 事件ID, 跟客户端发送的事件ID对应; 服务器主动广播的事件, 此值为0
+<b>event</b>: 字符, 事件名称
+<b>args</b>: 任意, 事件的描述参数, 由事件本身决定, 可为null
+<b>code</b>: 整型, 错误码, 当event为'error'是有此字段
 </pre>
 
-## Error code
+## 错误码列表
 <pre>
-UNKNOWN = -1, -- unknown error (bugs, json decoding, etc.)
-MYSQL = 1, -- mysql query error
-REDIS = 2, -- redis command error
-HTTP = 3, -- http request error
-INVALID_EVENT = 11, -- event not defined
+UNKNOWN = -1, --未知错误(一般为程序BUG)
+MYSQL = 1, --mysql操作异常
+REDIS = 2, --redis操作异常
+HTTP = 3, --http访问异常
 
-LOCK = 1001, -- mysql optimistic lock
-WATCH = 1002, -- redis transaction error
-
-SIGNIN_ALREADY = 2001, -- already signed in
-SIGNIN_UNAUTH = 2002, -- sid unauthorized
+LOCK = 1001, --mysql数据并发
+ILLEGAL = 2000, --非法访问,请求不合法(一般为程序BUG)
+SIGNIN_ALREADY = 2001, --已登录
 </pre>

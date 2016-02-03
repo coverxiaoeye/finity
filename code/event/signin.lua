@@ -5,12 +5,14 @@ local const = require('const')
 local config = require('config')
 local http = require('resty.http')
 
+--登录事件处理
 return function(req, sess, data)
   if sess.id then
     throw(code.SIGNIN_ALREADY)
   end
   local sid = req.args.sid
 
+  --验证sid合法性并得到userid
   local httpc = http:new()
   httpc:set_timeout(config.gate.timeout)
   local ok, err = httpc:connect(config.gate.host, config.gate.port)
@@ -42,6 +44,7 @@ return function(req, sess, data)
   httpc:close()
   local userid = cjson.decode(body).userid
 
+  --获取userid对应的玩家id,没有则自动创建
   local sql = 'SELECT id FROM player WHERE userid = %d'
   local player = data.queryone(sql, userid)
   if not player then
@@ -49,9 +52,14 @@ return function(req, sess, data)
     local id = data.insert(sql, userid)
     player = { id = id }
   end
-  if 1 == sess.kv.call('sismember', const.session(), player.id) then
+
+  local kv = sess.kv
+  --已存在于全服会话中则抛出异常
+  if 1 == kv.call('sismember', const.session(), player.id) then
     throw(code.SIGNIN_ALREADY)
   end
-  sess.kv.call('sadd', const.session(), player.id)
+  --添加会全服会话
+  kv.call('sadd', const.session(), player.id)
+
   sess.id = player.id
 end

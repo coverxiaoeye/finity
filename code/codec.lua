@@ -1,9 +1,11 @@
 local M = {}
 
+--字符串转lua对象
 M.dec = function(s)
   return loadstring('return ' .. s)()
 end
 
+--lua table转字符串
 M.enc = function(t)
   local tos
   local function vs(v)

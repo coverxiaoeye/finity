@@ -3,6 +3,7 @@ local code = require('code')
 local throw = require('throw')
 local config = require('config')
 
+--mysql操作工具
 return function(db)
   local M = { db = db }
 
