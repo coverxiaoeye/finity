@@ -1,6 +1,6 @@
 # 摘要
 <pre>
-Websocket游戏开发模块,开发语言为Lua,运行环境包括:
+Websocket游戏开发模板,开发语言为Lua,运行环境包括:
 <a href="http://openresty.org" target="_blank">OpenResty</a> (version: 1.9.7.2+)
 <a href="http://redis.io" target="_blank">Redis</a> (version: 2.0.0+)
 <a href="http://mysql.com" target="_blank">Mysql</a> (version: 5.5+).
