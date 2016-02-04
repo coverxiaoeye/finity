@@ -34,9 +34,9 @@ return
   gate =
   {
     timeout = 3000,
-    host = 'gate.weiyouba.cn',
+    host = 'localhost',
     port = 80,
-    uri = '/user/verify'
+    uri = '/s/sign/verify'
   }
 }
 

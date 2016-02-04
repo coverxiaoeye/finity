@@ -29,7 +29,7 @@ return function()
   --设置会话为关闭状态, 清理逻辑相关数据
   M.close = function()
     M.closed = true
-    if M.kv then
+    if M.id and M.kv then
       local playerkey = const.player(M.id)
       local group = M.kv.rawcall('hget', playerkey, 'group')
       --若会话在某个组中,则从组中删除本会话
@@ -267,9 +267,8 @@ return function()
     if M.sub then
       M.sub:close() --关闭订阅redis连接
     end
-    local bs, err = sock:send_close() --发送关闭事件
+    local bs = sock:send_close() --发送关闭事件
     if not bs then
-      ngx.log(ngx.ERR, 'failed to close websocket: ', err)
       ngx.exit(ngx.HTTP_CLOSE)
     end
   end

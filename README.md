@@ -6,6 +6,11 @@ Websocket游戏开发模板,开发语言为Lua,运行环境包括:
 <a href="http://mysql.com" target="_blank">Mysql</a> (version: 5.5+).
 </pre>
 
+# 部署
+<pre>
+需要根据环境修改nginx.conf和config.lua的配置
+</pre>
+
 ## 客户端发送数据格式(JSON)
 <pre>
 {"id": xxx, "event": "xxx", "args": xxx}
