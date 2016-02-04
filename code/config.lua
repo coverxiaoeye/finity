@@ -36,7 +36,11 @@ return
     timeout = 3000,
     host = 'localhost',
     port = 80,
+<<<<<<< HEAD
     uri = '/s/sign/verify'
+=======
+    uri = '/user/verify'
+>>>>>>> 9b19a821c1a2e8e0d2cd1e5178671a5f08914bf5
   }
 }
 
