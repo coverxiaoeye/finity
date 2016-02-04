@@ -6,14 +6,11 @@ Websocket游戏开发模板,开发语言为Lua,运行环境包括:
 <a href="http://mysql.com" target="_blank">Mysql</a> (version: 5.5+).
 </pre>
 
-<<<<<<< HEAD
 # 部署
 <pre>
 需要根据环境修改nginx.conf和config.lua的配置
 </pre>
 
-=======
->>>>>>> 9b19a821c1a2e8e0d2cd1e5178671a5f08914bf5
 ## 客户端发送数据格式(JSON)
 <pre>
 {"id": xxx, "event": "xxx", "args": xxx}
@@ -41,10 +38,6 @@ HTTP = 3, --http访问异常
 LOCK = 1001, --mysql数据并发
 ILLEGAL = 2000, --非法访问,请求不合法(一般为程序BUG)
 SIGNIN_ALREADY = 2001, --已登录
-<<<<<<< HEAD
-</pre>
-=======
 </pre>
 
 欢迎邮件交流：马世界 <18622283215@163.com>
->>>>>>> 9b19a821c1a2e8e0d2cd1e5178671a5f08914bf5

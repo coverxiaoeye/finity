@@ -33,7 +33,6 @@ return function(premature, groupid)
   local kv = kv(red)
 
   --3分钟结束,每5秒组播战场中的英雄
-<<<<<<< HEAD
   local n, groupkey, herokey, ids = 0, const.group(groupid), const.hero(groupid), nil
   while n <= 36 do
     --检查游戏是否为quit状态(有玩家退出)
@@ -42,21 +41,11 @@ return function(premature, groupid)
     if not next(group) then
       break
     end
-=======
-  local groupkey, herokey, ids = const.group(groupid), const.hero(groupid), nil
-  while true do
-    --检查游戏是否为quit状态(有玩家退出)
-    local ret = kv.call('hgetall', groupkey)
-    local group = kv.rawcall('array_to_hash', ret)
->>>>>>> 9b19a821c1a2e8e0d2cd1e5178671a5f08914bf5
     ids = codec.dec(group.member)
     if group.state == 'quit' then
       break
     end
-<<<<<<< HEAD
     n = n + 1
-=======
->>>>>>> 9b19a821c1a2e8e0d2cd1e5178671a5f08914bf5
     ngx.sleep(5)
     --获取所有战场中的英雄
     local ret, heroids = kv.call('lrange', herokey, 0, -1), {}

@@ -1,18 +1,3 @@
-<<<<<<< HEAD
-# for eclipse
-.project
-.classpath
-.buildpath
-.settings/
-
-# for idea
-*.iml
-.idea/
-=======
-# IDE related
 .idea/
 *.iml
-.project
-.classpath
 bin/
->>>>>>> 9b19a821c1a2e8e0d2cd1e5178671a5f08914bf5
