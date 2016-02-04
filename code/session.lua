@@ -36,8 +36,11 @@ return function()
       if group and group ~= ngx.null then
         local groupkey = const.group(group)
         local member = M.kv.rawcall('hget', groupkey, 'member')
-        local ids = codec.dec(member)
-        remove(ids, M.id)
+        local ids = {}
+        if member and member ~= ngx.null then
+          ids = codec.dec(member)
+          remove(ids, M.id)
+        end
         --组中还有其他会话则改组状态为"有人退出",否则直接删除该组
         if next(ids) then
           M.kv.rawcall('hmset', groupkey, 'state', 'quit', 'member', codec.enc(ids))
@@ -64,7 +67,7 @@ return function()
       return
     end
     local member = M.kv.call('hget', const.group(group), 'member')
-    local ids = cjson.decode(member)
+    local ids = codec.dec(member)
     for _, v in ipairs(ids) do
       M.singlecast(v, resp)
     end

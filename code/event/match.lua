@@ -17,26 +17,15 @@ return function(req, sess)
 
   --遍历所有状态为wait的游戏组, 未找到则等5秒后重试
   local groups = kv.call('keys', const.KEY_GROUP .. '/*')
-  local retry, sleep, groupid, group, ids = 0, 5, nil, nil, nil
-  while retry < 2 do
-    for _, v in ipairs(groups) do
-      local ret = kv.call('hgetall', v)
-      local g = kv.rawcall('array_to_hash', ret)
-      if g.state == 'wait' then
-        local idx = string.find(v, '/', 1, true)
-        groupid = string.sub(v, idx + 1)
-        group = g
-      end
-    end
-    if groupid then
-      break
-    end
-    retry = retry + 1
-    if retry < 2 then
-      --单播重试事件并等5秒
-      local resp = { id = 0, event = 'retry', args = { n = retry, sleep = sleep } }
-      sess.singlecast(sess.id, resp)
-      ngx.sleep(sleep)
+  local groupid, group, ids
+
+  for _, v in ipairs(groups) do
+    local ret = kv.call('hgetall', v)
+    local g = kv.rawcall('array_to_hash', ret)
+    if g.state == 'wait' then
+      local idx = string.find(v, '/', 1, true)
+      groupid = string.sub(v, idx + 1)
+      group = g
     end
   end
 
