@@ -21,11 +21,11 @@ Websocket游戏开发模板,开发语言为Lua,运行环境包括:
 
 ## 服务器广播数据格式(JSON)
 <pre>
-{"id": xxx, "event": "xxx", "args": xxx, "err": xxx}
+{"id": xxx, "event": "xxx", "args": xxx}
 <b>id</b>: 整型, 事件ID, 跟客户端发送的事件ID对应; 服务器主动广播的事件, 此值为0
 <b>event</b>: 字符, 事件名称
 <b>args</b>: 任意, 事件的描述参数, 由事件本身决定, 可为null
-<b>code</b>: 整型, 错误码, 当event为'error'是有此字段
+<b>args.code</b>: 整型, 错误码, 当event为'error'是有此字段
 </pre>
 
 ## 错误码列表
